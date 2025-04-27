@@ -3,12 +3,14 @@ import { Sidebar } from 'lucide-react'
 import React from 'react'
 import { UserButton } from "@clerk/nextjs"
 import { AppSidebar } from './dashboard/app-sidebar'
+import { ProjectProvider } from '@/hooks/project-context' // <-- add this import
 type Props = {
     children: React.ReactNode
 }
 const SidebarLayout = ({ children} : Props) => {
   return (
-    <SidebarProvider>
+    <ProjectProvider>
+      <SidebarProvider>
         <AppSidebar />
         <main className='w-full m-2'>
             <div className='flex items-center gap-2 border-sidebar-border bg-sidebar border shadow rounded-md p-2 px-4 '>
@@ -22,9 +24,8 @@ const SidebarLayout = ({ children} : Props) => {
                 {children}
             </div>
         </main>
-
-    </SidebarProvider>
-
+      </SidebarProvider>
+    </ProjectProvider>
   )
 }
 

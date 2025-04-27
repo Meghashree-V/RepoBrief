@@ -48,15 +48,13 @@ const items = [
   },
 ]
 
-const projects = [
-  { name: 'Project 1' },
-  { name: 'Project 2' },
-  { name: 'Project 3' },
-]
+
+import { useProjectsCtx } from "@/hooks/project-context";
 
 export function AppSidebar() {
   const pathname = usePathname()
   const { open } = useSidebar()
+  const { projects, projectId, setProjectId } = useProjectsCtx();
 
   return (
     <Sidebar collapsible="icon" variant="floating">
@@ -101,17 +99,24 @@ export function AppSidebar() {
           <SidebarGroupContent className="list-none">
             <SidebarMenu>
               {projects.map((project) => (
-                <SidebarMenuItem key={project.name}>
-                  <SidebarMenuButton asChild>
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-muted transition">
-                      <div className="rounded-sm border size-6 flex items-center justify-center text-sm bg-white text-primary">
-                        {project.name[0]}
-                      </div>
-                      <span className="text-sm">{project.name}</span>
-                    </div>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+  <SidebarMenuItem key={project.id}>
+    <SidebarMenuButton
+      isActive={projectId === project.id}
+      onClick={() => setProjectId(project.id)}
+      className={cn(
+        "flex items-center gap-2 px-3 py-2 rounded-md transition cursor-pointer",
+        projectId === project.id
+          ? "bg-primary text-white !bg-primary !text-white"
+          : "hover:bg-muted"
+      )}
+    >
+      <div className="rounded-sm border size-6 flex items-center justify-center text-sm bg-white text-primary">
+        {project.name[0]}
+      </div>
+      <span className="text-sm">{project.name}</span>
+    </SidebarMenuButton>
+  </SidebarMenuItem>
+))}
 
               {open && (
                 <SidebarMenuItem>
