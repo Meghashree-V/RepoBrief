@@ -37,7 +37,7 @@ function parseGitHubUrl(url: string): { owner: string; repo: string } {
 /**
  * Fetch commit hashes and basic info from a GitHub repository.
  */
-export async function getCommitHashes(githubUrl: string): Promise<Array<{ hash: string; message: string; author: string; date: string }>> {
+export async function getCommitHashes(githubUrl: string): Promise<Array<{ hash: string; message: string; author: string; date: string; authorAvatar?: string | null }>> {
   const { owner, repo } = parseGitHubUrl(githubUrl);
   const response = await octokit.request('GET /repos/{owner}/{repo}/commits', {
     owner,
@@ -51,6 +51,7 @@ export async function getCommitHashes(githubUrl: string): Promise<Array<{ hash: 
     message: commit.commit.message,
     author: commit.commit.author?.name ?? "Unknown",
     date: commit.commit.author?.date ?? "Unknown",
+    authorAvatar: commit.author?.avatar_url ?? null, // Add avatar extraction
   }));
 }
 
@@ -65,6 +66,36 @@ export async function fetchCommits(owner: string, repo: string) {
 }
 
 // Add more GitHub API helpers as needed
+
+import axios from "axios";
+import { summarizeCommit } from "./gemini";
+
+/**
+ * Fetches the diff for a commit from GitHub and summarizes it using Gemini.
+ * @param repoUrl - The base GitHub repo URL (e.g., https://github.com/org/repo)
+ * @param commitHash - The commit hash to summarize
+ * @param githubToken - GitHub token for authentication (optional, for private repos or higher rate limits)
+ * @returns The summary string or an empty string on error
+ */
+export async function aiSummarizeCommit(repoUrl: string, commitHash: string, githubToken?: string): Promise<string> {
+  try {
+    // Construct the GitHub URL for the commit diff
+    const diffUrl = `${repoUrl}/commit/${commitHash}.diff`;
+    const headers: Record<string, string> = {
+      "Accept": "application/vnd.github.v3.diff"
+    };
+    if (githubToken) {
+      headers["Authorization"] = `token ${githubToken}`;
+    }
+    // Fetch the diff from GitHub
+    const { data: diff } = await axios.get(diffUrl, { headers });
+    // Summarize the diff using Gemini
+    return await summarizeCommit(diff);
+  } catch (error) {
+    console.error("Error in aiSummarizeCommit:", error);
+    return "";
+  }
+}
 
 // Use local Prisma client for type-safe model access
 import { prisma } from "./prisma";
@@ -104,32 +135,76 @@ async function filterOutUnprocessedCommits(projectId: string, commitHashes: stri
  * Returns up to 10 new commits, each as an object with message, authorName, authorAvatar, committedAt
  */
 export async function pullCommit(projectId: string) {
-  // Step 1: Get project and GitHub URL
-  const { githubUrl } = await fetchProjectGithubUrl(projectId);
+  try {
+    // Step 1: Get project and GitHub URL
+    console.log('[pullCommit] Fetching project and GitHub URL for projectId:', projectId);
+    const { githubUrl } = await fetchProjectGithubUrl(projectId);
+    console.log('[pullCommit] Got GitHub URL:', githubUrl);
 
-  // Step 2: Get latest commits from GitHub
-  const commits = await getCommitHashes(githubUrl); // [{ hash, message, author, date }]
+    // Step 2: Get latest commits from GitHub
+    const commits = await getCommitHashes(githubUrl) as Array<{ hash: string; message: string; author: string; date: string; authorAvatar?: string | null }>;
+    console.log('[pullCommit] Got commits from GitHub:', commits.length);
 
-  // Step 3: Filter out already-processed commits
-  const newHashes = await filterOutUnprocessedCommits(
-    projectId,
-    commits.map(c => c.hash)
-  );
+    // Step 3: Filter out already-processed commits
+    const newHashes: string[] = await filterOutUnprocessedCommits(
+      projectId,
+      commits.map(c => c.hash)
+    );
+    console.log('[pullCommit] New commit hashes to process:', newHashes);
+    const newCommits = commits.filter((c) => newHashes.includes(c.hash));
 
-  // Step 4: Get full commit objects for only new commits, limit to 10, remove hash
-  type CommitShape = { hash: string; message: string; author: string; date: string };
-  const unprocessedCommits = (commits as CommitShape[])
-    .filter((c: CommitShape) => newHashes.includes(c.hash))
-    .slice(0, 10)
-    .map((commit: CommitShape) => ({
-      message: commit.message,
-      authorName: commit.author,
-      authorAvatar: null, // You can enhance this if you want to fetch avatar
-      committedAt: commit.date,
-    }));
+    // Step 4: Summarize and save new commits
+    console.log('[pullCommit] Processing', newCommits.length, 'new commits');
+    for (const commit of newCommits) {
+      let summary = '';
+      try {
+        summary = await aiSummarizeCommit(githubUrl, commit.hash);
+      } catch (err) {
+        console.error(`[pullCommit] Error summarizing commit ${commit.hash}:`, err);
+        summary = '[AI summary failed]';
+      }
+      try {
+        await prisma.commit.upsert({
+          where: { commitHash: commit.hash },
+          update: {
+            summary,
+            message: commit.message,
+            authorName: commit.author,
+            authorAvatar: commit.authorAvatar ?? '',
+            committedAt: new Date(commit.date),
+          },
+          create: {
+            projectId,
+            commitHash: commit.hash,
+            message: commit.message,
+            authorName: commit.author,
+            authorAvatar: commit.authorAvatar ?? '',
+            committedAt: new Date(commit.date),
+            summary,
+          }
+        });
+      } catch (err) {
+        console.error(`[pullCommit] Error saving commit ${commit.hash} to Prisma:`, err);
+        throw new Error(`Could not save commit ${commit.hash} to database: ` + (err as Error).message);
+      }
+    }
 
-  return unprocessedCommits;
+    // Always return from DB so UI matches Prisma
+    try {
+      return prisma.commit.findMany({
+        where: { projectId },
+        orderBy: { committedAt: 'desc' },
+      });
+    } catch (err) {
+      console.error('[pullCommit] Error fetching commits from DB:', err);
+      throw new Error('Could not fetch commits from database: ' + (err as Error).message);
+    }
+  } catch (err) {
+    console.error('[pullCommit] Error pulling commits:', err);
+    throw new Error('Could not pull commits: ' + (err as Error).message);
+  }
 }
+
 
 // TEMP: Automated test: try user's repo, then fallback to public repo if 404
 if (import.meta.main) {

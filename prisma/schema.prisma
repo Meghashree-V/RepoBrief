@@ -48,7 +48,7 @@ model Commit {
     project      Project  @relation(fields: [projectId], references: [id])
 
     message      String
-    commitHash   String
+    commitHash   String   @unique
     authorName   String
     authorAvatar String
     committedAt  DateTime

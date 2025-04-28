@@ -42,12 +42,15 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
 const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
+  // Ensure stack and cause are always included for debugging
     return {
       ...shape,
       data: {
         ...shape.data,
         zodError:
           error.cause instanceof ZodError ? error.cause.flatten() : null,
+        stack: error.stack,
+        cause: error.cause,
       },
     };
   },
