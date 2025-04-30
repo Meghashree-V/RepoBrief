@@ -4,6 +4,7 @@ import { useUser } from "@clerk/nextjs"
 import { useProjectsCtx } from '@/hooks/project-context';
 import { Github, ExternalLink } from 'lucide-react';
 import { CommitLog } from './commit-log';
+import AskQuestionCard from './ask-question-card';
 
 const DashboardPage = () => {
   const { user } = useUser();
@@ -44,9 +45,7 @@ const DashboardPage = () => {
       <div className="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-5">
         {/* Ask Question Card */}
         <div className="col-span-1 sm:col-span-3">
-          <div className="bg-muted rounded-md p-4 h-40 flex items-center justify-center">
-            [Ask Question Card Placeholder]
-          </div>
+          <AskQuestionCard />
         </div>
         {/* Meeting Card */}
         <div className="col-span-1 sm:col-span-2">

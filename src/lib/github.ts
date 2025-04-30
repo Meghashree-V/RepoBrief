@@ -70,6 +70,9 @@ export async function fetchCommits(owner: string, repo: string) {
 import axios from "axios";
 import { summarizeCommit } from "./gemini";
 
+// Add a delay function to pause execution
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
  * Fetches the diff for a commit from GitHub and summarizes it using Gemini.
  * @param repoUrl - The base GitHub repo URL (e.g., https://github.com/org/repo)
@@ -78,23 +81,69 @@ import { summarizeCommit } from "./gemini";
  * @returns The summary string or an empty string on error
  */
 export async function aiSummarizeCommit(repoUrl: string, commitHash: string, githubToken?: string): Promise<string> {
-  try {
-    // Construct the GitHub URL for the commit diff
-    const diffUrl = `${repoUrl}/commit/${commitHash}.diff`;
-    const headers: Record<string, string> = {
-      "Accept": "application/vnd.github.v3.diff"
-    };
-    if (githubToken) {
-      headers["Authorization"] = `token ${githubToken}`;
+  const MAX_RETRIES = 3;
+  let retries = 0;
+  let lastError: any = null;
+
+  while (retries < MAX_RETRIES) {
+    try {
+      // Construct the GitHub URL for the commit diff
+      const diffUrl = `${repoUrl}/commit/${commitHash}.diff`;
+      const headers: Record<string, string> = {
+        "Accept": "application/vnd.github.v3.diff"
+      };
+      if (githubToken) {
+        headers["Authorization"] = `token ${githubToken}`;
+      }
+      
+      try {
+        // Fetch the diff from GitHub
+        const { data: diff } = await axios.get(diffUrl, { headers });
+        
+        // Summarize the diff using Gemini
+        return await summarizeCommit(diff);
+      } catch (axiosError: any) {
+        // Handle specific HTTP errors from GitHub
+        if (axiosError.response) {
+          const status = axiosError.response.status;
+          
+          if (status === 403) {
+            console.error(`GitHub API 403 Forbidden error for commit ${commitHash}. This may be due to access restrictions or rate limiting.`);
+            // Return a generic summary for forbidden resources
+            return `Updated code in repository. (Note: Detailed summary unavailable due to GitHub access restrictions)`;
+          } else if (status === 404) {
+            console.error(`GitHub API 404 Not Found error for commit ${commitHash}. The commit may not exist or be accessible.`);
+            return `New commit added to repository. (Note: Detailed summary unavailable as commit details could not be found)`;
+          }
+        }
+        
+        // Re-throw for other handling
+        throw axiosError;
+      }
+    } catch (error: any) {
+      lastError = error;
+      
+      // Check if it's a rate limit error (HTTP 429)
+      if (error.response && error.response.status === 429) {
+        retries++;
+        console.log(`Rate limit hit, retry ${retries}/${MAX_RETRIES}`);
+        
+        // Get retry-after header or use exponential backoff
+        const retryAfter = error.response.headers['retry-after'];
+        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, retries) * 1000;
+        
+        console.log(`Waiting ${waitTime}ms before retrying...`);
+        await delay(waitTime);
+      } else {
+        // For other errors, don't retry
+        console.error("Error in aiSummarizeCommit:", error);
+        return "";
+      }
     }
-    // Fetch the diff from GitHub
-    const { data: diff } = await axios.get(diffUrl, { headers });
-    // Summarize the diff using Gemini
-    return await summarizeCommit(diff);
-  } catch (error) {
-    console.error("Error in aiSummarizeCommit:", error);
-    return "";
   }
+  
+  console.error("Max retries reached in aiSummarizeCommit:", lastError);
+  return "";
 }
 
 // Use local Prisma client for type-safe model access
@@ -158,6 +207,12 @@ export async function pullCommit(projectId: string) {
     for (const commit of newCommits) {
       let summary = '';
       try {
+        // Add a delay between commits to avoid rate limiting
+        if (newCommits.indexOf(commit) > 0) {
+          console.log('[pullCommit] Adding delay between commits to avoid rate limits...');
+          await delay(2000); // 2 second delay between commits
+        }
+        
         summary = await aiSummarizeCommit(githubUrl, commit.hash);
       } catch (err) {
         console.error(`[pullCommit] Error summarizing commit ${commit.hash}:`, err);
