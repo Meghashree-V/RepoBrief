@@ -160,6 +160,31 @@ const AskQuestionCard = (props: AskQuestionCardProps = {}) => {
     }
   }
 
+  // Main render for dashboard
+  if (!isQAPage) {
+    return (
+      <div className="w-full">
+        <form onSubmit={(e) => handleAskQuestion(e)}>
+          <textarea
+            placeholder="Which file should I edit to change the homepage?"
+            className="w-full p-3 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[120px] resize-none"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+          />
+          <div className="mt-4">
+            <button
+              type="submit"
+              disabled={loading || !question.trim()}
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
+            >
+              {loading ? 'Processing...' : 'Ask RepoBrief!'}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <Card className="relative col-span-3">
       <CardHeader>
