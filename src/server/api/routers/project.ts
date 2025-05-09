@@ -2,10 +2,42 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 import { pullCommit } from "@/lib/github";
-import { loadGitHubRepository } from "@/lib/githubLoader";
+import { loadGitHubRepository, checkCredits } from "@/lib/githubLoader";
 import { generateEmbedding, summarizeCode } from "@/lib/embeddingPipeline";
 
 export const projectRouter = createTRPCRouter({
+  // Check credits required for a repository
+  checkCredits: protectedProcedure
+    .input(
+      z.object({
+        githubUrl: z.string(),
+        githubToken: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      try {
+        // Get file count from the repository
+        const fileCount = await checkCredits(input.githubUrl, input.githubToken);
+
+        // Get user's current credits
+        const user = await ctx.db.user.findUnique({
+          where: { id: ctx.user.userId! },
+          select: { credits: true }
+        });
+
+        if (!user) {
+          throw new Error('User not found');
+        }
+
+        return {
+          fileCount,
+          userCredits: user.credits
+        };
+      } catch (error: any) {
+        console.error('Error checking credits:', error);
+        throw new Error(error.message || 'Failed to check credits');
+      }
+    }),
   createProject: protectedProcedure
     .input(
       z.object({
@@ -15,7 +47,22 @@ export const projectRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Create the project
+      // First check if user has enough credits
+      const fileCount = await checkCredits(input.githuburl, input.githubtoken);
+      const user = await ctx.db.user.findUnique({
+        where: { id: ctx.user.userId! },
+        select: { credits: true }
+      });
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      if (user.credits < fileCount) {
+        throw new Error('Insufficient credits');
+      }
+
+      // Create the project and deduct credits
       const project = await ctx.db.project.create({
         data: {
           name: input.name,
@@ -25,6 +72,21 @@ export const projectRouter = createTRPCRouter({
               userId: ctx.user.userId!,
             }
           }
+        }
+      });
+
+      // Deduct credits
+      await ctx.db.user.update({
+        where: { id: ctx.user.userId! },
+        data: { credits: { decrement: fileCount } }
+      });
+
+      // Record the transaction
+      await ctx.db.StripeTransaction.create({
+        data: {
+          userId: ctx.user.userId!,
+          credits: -fileCount,
+          user: { connect: { id: ctx.user.userId! } }
         }
       });
       
@@ -163,18 +225,29 @@ export const projectRouter = createTRPCRouter({
     }),
   // Returns all projects for the current user (not deleted, most recent first)
   getProjects: protectedProcedure.query(async ({ ctx }) => {
-    const projects = await ctx.db.project.findMany({
-      where: {
-        userToProject: {
-          some: {
-            userId: ctx.user.userId!,
+    // Check if user ID is available
+    if (!ctx.user?.userId) {
+      console.warn('User ID not available in getProjects query');
+      return [];
+    }
+    
+    try {
+      const projects = await ctx.db.project.findMany({
+        where: {
+          userToProject: {
+            some: {
+              userId: ctx.user.userId,
+            },
           },
+          deletedAt: null,
         },
-        deletedAt: null,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    return projects;
+        orderBy: { createdAt: 'desc' },
+      });
+      return projects;
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      return [];
+    }
   }),
   pullCommits: protectedProcedure
     .input(z.object({ projectId: z.string() }))

@@ -107,23 +107,36 @@ const AskQuestionCard = (props: AskQuestionCardProps = {}) => {
           projectId,
         }),
       });
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to get answer');
+      let data: any = {};
+      try {
+        data = await response.json();
+      } catch (jsonErr) {
+        // If JSON parsing fails, show generic error
+        setAnswer('Sorry, there was a problem processing the server response.');
+        setLoading(false);
+        return;
       }
-      
+
+      if (!response.ok) {
+        // Always show the error or answer from backend
+        setAnswer(data.answer || data.message || 'Failed to get answer');
+        setLoading(false);
+        return;
+      }
+
       if (data.referencedFiles && Array.isArray(data.referencedFiles)) {
         setReferencedFiles(data.referencedFiles);
       }
-      
+
       if (data.answer) {
         setAnswer(data.answer);
       } else {
         setAnswer("Sorry, no answer was generated.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error in handleAskQuestion:", err);
+      setAnswer(err?.message || 'Sorry, there was an unexpected error.');
+      setLoading(false);
       setAnswer("Sorry, there was an error getting the answer.");
       setReferencedFiles([]);
     } finally {

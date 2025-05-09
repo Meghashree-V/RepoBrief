@@ -1,4 +1,5 @@
 import { GithubRepoLoader } from "@langchain/community/document_loaders/web/github";
+import { Octokit } from "@octokit/rest";
 
 export interface LoadGitHubRepositoryOptions {
   branch?: string;
@@ -108,6 +109,81 @@ This repository appears to be empty or inaccessible. Please add some files to th
         }
       }];
     }
+  }
+}
+
+/**
+ * Calculate required credits for a GitHub repository based on total file count
+ * @param githubUrl The GitHub repository URL
+ * @param githubToken Optional GitHub access token for private repos
+ * @returns Number of credits required
+ */
+export async function checkCredits(githubUrl: string, githubToken?: string): Promise<number> {
+  try {
+    const octokit = new Octokit({ auth: githubToken });
+    const urlParts = githubUrl.split('/');
+    const githubOwner = urlParts[3];
+    const githubRepo = urlParts[4];
+
+    if (!githubOwner || !githubRepo) {
+      return 0;
+    }
+
+    const totalFiles = await getFileCount('', octokit, githubOwner, githubRepo, 0);
+    // Calculate credits: 1 credit per file, minimum 10 credits
+    return Math.max(10, totalFiles);
+  } catch (error) {
+    console.error('Error checking credits:', error);
+    return 0;
+  }
+}
+
+/**
+ * Recursively count files in a GitHub repository
+ */
+async function getFileCount(
+  path: string,
+  octokit: Octokit,
+  githubOwner: string,
+  githubRepo: string,
+  accumulator: number
+): Promise<number> {
+  try {
+    const { data } = await octokit.rest.repos.getContent({
+      owner: githubOwner,
+      repo: githubRepo,
+      path: path,
+    });
+
+    if (!Array.isArray(data)) {
+      if (data.type === 'file') {
+        return accumulator + 1;
+      }
+      return accumulator;
+    }
+
+    let fileCount = 0;
+    const directories: string[] = [];
+
+    for (const item of data) {
+      if (item.type === 'dir') {
+        directories.push(item.path);
+      } else if (item.type === 'file') {
+        fileCount++;
+      }
+    }
+
+    if (directories.length > 0) {
+      const directoryFileCounts = await Promise.all(
+        directories.map((dir) => getFileCount(dir, octokit, githubOwner, githubRepo, 0))
+      );
+      fileCount += directoryFileCounts.reduce((sum, count) => sum + count, 0);
+    }
+
+    return accumulator + fileCount;
+  } catch (error) {
+    console.error('Error counting files:', error);
+    return accumulator;
   }
 }
 

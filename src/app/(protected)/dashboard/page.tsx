@@ -9,6 +9,7 @@ import MeetingUploadCard from "./meeting-upload-card";
 import TeamMembers from './team-members';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+// Credit balance moved to billing page
 
 const DashboardPage = () => {
   const { user } = useUser();
@@ -198,8 +199,10 @@ const DashboardPage = () => {
         </div>
       )}
 
+      {/* Credit Balance moved to billing page */}
+
       {/* Main content grid for Ask Question and Meeting cards */}
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Ask Question Card */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
           <h2 className="text-lg font-medium mb-4">Ask a question</h2>
