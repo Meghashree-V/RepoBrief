@@ -5,9 +5,11 @@
 /**
  * Formats a meeting summary into a more structured and readable format
  * @param summaryText The original summary text from AssemblyAI
+ * @param fileName Optional filename to help with title generation
+ * @param utterances Optional utterances from the transcription for speaker analysis
  * @returns Formatted summary with key points extracted
  */
-export function formatMeetingSummary(summaryText: string, utterances?: { speaker: string; text: string; start: number; end: number }[]): {
+export function formatMeetingSummary(summaryText: string, fileName?: string, utterances?: { speaker: string; text: string; start: number; end: number }[]): {
   keyPoints: string[];
   mainSummary: string;
   meetingTitle: string;
@@ -127,31 +129,48 @@ export function formatMeetingSummary(summaryText: string, utterances?: { speaker
   // Improved meeting title extraction
   let meetingTitle = "Meeting Summary";
   
-  // Look for explicit title patterns
-  const titlePatterns = [
-    /\b(meeting|discussion|call|session|conference)\s+(about|on|regarding|concerning|for|to discuss)\s+([^.!?]+)/i,
-    /\b(the|this)\s+(meeting|discussion|call|session|conference)\s+(was|is)\s+(about|on|regarding|concerning)\s+([^.!?]+)/i,
-    /\b(topic|subject|focus|agenda|purpose)\s+(of|for)\s+(the|this)\s+(meeting|discussion|call|session|conference)\s+(was|is)\s+([^.!?]+)/i
-  ];
-  
-  // Try to find an explicit title using patterns
-  for (const pattern of titlePatterns) {
-    const match = summaryText.match(pattern);
-    if (match && match.length > 0) {
-      // Extract the relevant capture group based on the pattern
-      const titlePart = match[match.length - 1];
-      if (titlePart && titlePart.trim().length > 3 && titlePart.trim().length < 100) {
-        meetingTitle = titlePart.trim().replace(/\.$/,''); // Remove trailing period if present
-        break;
-      }
+  // First try to generate a title from the filename if provided
+  if (fileName) {
+    // Remove file extension and replace underscores/hyphens with spaces
+    const cleanFileName = fileName.replace(/\.(mp3|wav|m4a|ogg)$/i, '')
+      .replace(/[_-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+      
+    // If the filename looks meaningful (not just a timestamp), use it as a base for the title
+    if (cleanFileName && !/^\d+$/.test(cleanFileName) && cleanFileName.length > 3) {
+      meetingTitle = `Meeting: ${cleanFileName}`;
     }
   }
   
-  // If no explicit title found, use the first sentence if it's not too long
-  if (meetingTitle === "Meeting Summary" && cleanedSentences.length > 0) {
-    const firstSentence = cleanedSentences[0] || '';
-    if (firstSentence.length < 100 && firstSentence.length > 10) {
-      meetingTitle = firstSentence.replace(/^(this|the) meeting (was|is) about/i, '').trim();
+  // If we couldn't get a good title from the filename, try to extract it from the summary
+  if (meetingTitle === "Meeting Summary") {
+    // Look for explicit title patterns
+    const titlePatterns = [
+      /\b(meeting|discussion|call|session|conference)\s+(about|on|regarding|concerning|for|to discuss)\s+([^.!?]+)/i,
+      /\b(the|this)\s+(meeting|discussion|call|session|conference)\s+(was|is)\s+(about|on|regarding|concerning)\s+([^.!?]+)/i,
+      /\b(topic|subject|focus|agenda|purpose)\s+(of|for)\s+(the|this)\s+(meeting|discussion|call|session|conference)\s+(was|is)\s+([^.!?]+)/i
+    ];
+    
+    // Try to find an explicit title using patterns
+    for (const pattern of titlePatterns) {
+      const match = summaryText.match(pattern);
+      if (match && match.length > 0) {
+        // Extract the relevant capture group based on the pattern
+        const titlePart = match[match.length - 1];
+        if (titlePart && titlePart.trim().length > 3 && titlePart.trim().length < 100) {
+          meetingTitle = titlePart.trim().replace(/\.$/,''); // Remove trailing period if present
+          break;
+        }
+      }
+    }
+    
+    // If no explicit title found, use the first sentence if it's not too long
+    if (meetingTitle === "Meeting Summary" && cleanedSentences.length > 0) {
+      const firstSentence = cleanedSentences[0] || '';
+      if (firstSentence.length < 100 && firstSentence.length > 10) {
+        meetingTitle = firstSentence.replace(/^(this|the) meeting (was|is) about/i, '').trim();
+      }
     }
   }
   

@@ -101,35 +101,58 @@ export default function MeetingsPage() {
       if (storageError) {
         console.error('Error deleting file from storage:', storageError);
         toast.error('Failed to delete meeting from storage.');
-        // Restore the meeting to the list if deletion failed
-        setMeetings(prev => [meeting, ...prev]);
-        return;
       } else {
-        console.log('Successfully deleted from storage:', path);
+        // If permanent deletion, also delete from database and transcriptions
+        if (permanent) {
+          // Delete transcription data from Supabase
+          try {
+            // First, get the transcription ID if it exists
+            const response = await fetch(`/api/transcribe?audioUrl=${encodeURIComponent(meeting.url)}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data.transcriptionId) {
+                // Delete the transcription from the database
+                const deleteResponse = await fetch(`/api/transcribe?id=${data.transcriptionId}`, {
+                  method: 'DELETE',
+                });
+                
+                if (!deleteResponse.ok) {
+                  console.error('Error deleting transcription from database:', await deleteResponse.text());
+                } else {
+                  console.log('Successfully deleted transcription from database');
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Error deleting transcription data:', err);
+          }
+
+          // If permanent deletion, remove from deleted URLs list if it's there
+          if (deletedMeetingUrls.includes(meeting.url)) {
+            const filteredUrls = deletedMeetingUrls.filter(url => url !== meeting.url);
+            setDeletedMeetingUrls(filteredUrls);
+            localStorage.setItem('deletedMeetingUrls', JSON.stringify(filteredUrls));
+          }
+
+          // Remove transcription from localStorage as well
+          const storageKey = `meeting_transcription_${btoa(meeting.url)}`;
+          localStorage.removeItem(storageKey);
+
+          // Refresh the meetings list
+          setTimeout(() => {
+            setRefreshTrigger(prev => prev + 1);
+          }, 500);
+
+          toast.success('Meeting permanently deleted');
+        } else {
+          // For temporary deletion, just show success message
+          toast.success('Meeting moved to trash');
+          
+          // Still remove from localStorage to prevent stale data
+          const storageKey = `meeting_transcription_${btoa(meeting.url)}`;
+          localStorage.removeItem(storageKey);
+        }
       }
-
-      // Delete any associated transcription data from the database
-      const { error: dbError } = await supabase
-        .from('meeting_transcriptions')
-        .delete()
-        .eq('audio_url', meeting.url);
-
-      if (dbError) {
-        console.error('Error deleting transcription data:', dbError);
-      } else {
-        console.log('Successfully deleted transcription data for:', meeting.url);
-      }
-
-      // For permanent deletion, also remove from the deleted URLs list if it exists there
-      if (permanent && deletedMeetingUrls.includes(meeting.url)) {
-        const filteredUrls = deletedMeetingUrls.filter(url => url !== meeting.url);
-        setDeletedMeetingUrls(filteredUrls);
-        localStorage.setItem('deletedMeetingUrls', JSON.stringify(filteredUrls));
-      }
-
-      // Remove transcription from localStorage as well
-      const storageKey = `meeting_transcription_${btoa(meeting.url)}`;
-      localStorage.removeItem(storageKey);
 
       // Refresh the meetings list
       setTimeout(() => {

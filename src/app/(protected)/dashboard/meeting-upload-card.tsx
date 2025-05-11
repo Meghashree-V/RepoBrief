@@ -83,10 +83,10 @@ export default function MeetingUploadCard({ onUploadSuccess }: MeetingUploadCard
         const publicUrl = publicUrlData?.publicUrl || null;
         setUrl(publicUrl);
         
-        // Show the summary popup
+        // Start transcription in the background but don't show popup
         if (publicUrl) {
-          // Start transcription automatically
-          startTranscription(publicUrl, file.name);
+          // Start transcription automatically but don't show popup immediately
+          startTranscriptionInBackground(publicUrl, file.name);
         }
         
         // Call the onUploadSuccess callback if provided
@@ -101,7 +101,7 @@ export default function MeetingUploadCard({ onUploadSuccess }: MeetingUploadCard
     }
   };
 
-  // Function to start transcription and show summary
+  // Function to start transcription and show summary when View Summary is clicked
   const startTranscription = async (audioUrl: string, fileName: string) => {
     setSummaryLoading(true);
     setShowSummaryPopup(true);
@@ -117,7 +117,62 @@ export default function MeetingUploadCard({ onUploadSuccess }: MeetingUploadCard
             `This is an automated summary of the meeting transcript: ${existingTranscription.text.substring(0, 500)}...` : 
             'No summary available');
         
-        const formattedSummary = formatMeetingSummary(summaryText);
+        // Format the summary for display
+        try {
+          const formattedSummary = formatMeetingSummary(summaryText, fileName);
+          setMeetingSummary(formattedSummary);
+        } catch (err) {
+          console.error('Error formatting summary:', err);
+          setMeetingSummary({
+            meetingTitle: fileName,
+            keyPoints: [],
+            mainSummary: summaryText
+          });
+        }
+        
+        setSummaryLoading(false);
+        return;
+      }
+      
+      // If we don't have a completed transcription, start one
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ audioUrl }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error);
+      }
+      
+      // Start polling for transcription status
+      pollTranscriptionStatus(data.id, audioUrl, fileName);
+      
+    } catch (err: any) {
+      console.error('Error starting transcription:', err);
+      toast.error('Failed to generate meeting summary');
+      setSummaryLoading(false);
+    }
+  };
+  
+  // Function to start transcription in background without showing popup
+  const startTranscriptionInBackground = async (audioUrl: string, fileName: string) => {
+    try {
+      // First check if we already have a transcription
+      const existingTranscription = await getMeetingTranscription(audioUrl);
+      
+      if (existingTranscription && existingTranscription.status === 'completed') {
+        // We already have a transcription, just store it for later
+        const summaryText = existingTranscription.summary?.text || 
+          (existingTranscription.text ? 
+            `This is an automated summary of the meeting transcript: ${existingTranscription.text.substring(0, 500)}...` : 
+            'No summary available');
+        
+        const formattedSummary = formatMeetingSummary(summaryText, fileName);
         
         // Add the transcript to the formatted summary
         formattedSummary.transcript = existingTranscription.text || '';
@@ -159,7 +214,8 @@ export default function MeetingUploadCard({ onUploadSuccess }: MeetingUploadCard
   // Function to poll transcription status
   const pollTranscriptionStatus = async (id: string, audioUrl: string, fileName: string) => {
     try {
-      const response = await fetch(`/api/transcription-status?id=${id}`);
+      // Use the correct API endpoint for transcription status
+      const response = await fetch(`/api/transcribe?id=${id}`);
       
       if (!response.ok) {
         throw new Error('Failed to check transcription status');
@@ -174,7 +230,7 @@ export default function MeetingUploadCard({ onUploadSuccess }: MeetingUploadCard
             `This is an automated summary of the meeting transcript: ${result.text.substring(0, 500)}...` : 
             'No summary available');
         
-        const formattedSummary = formatMeetingSummary(summaryText);
+        const formattedSummary = formatMeetingSummary(summaryText, fileName);
         
         // Add the full transcript to the summary
         formattedSummary.transcript = result.text || '';
@@ -206,15 +262,14 @@ export default function MeetingUploadCard({ onUploadSuccess }: MeetingUploadCard
   const exportSummary = () => {
     if (!meetingSummary) return;
     
-    // Create formatted markdown content
+    // Create formatted markdown content with safe handling of potentially missing properties
     const markdownContent = [
-      `# ${meetingSummary.meetingTitle}\n\n`,
+      `# ${meetingSummary.meetingTitle || 'Meeting Summary'}\n\n`,
       `## Full Transcript\n\n${meetingSummary.transcript || 'Transcript not available'}\n\n`,
-      `## Key Points\n\n${meetingSummary.keyPoints.map((p: string) => `- ${p}`).join('\n')}\n\n`,
-      `## Action Items\n\n${meetingSummary.actionItems.map((a: string) => `- ${a}`).join('\n')}\n\n`,
-      `## Decisions\n\n${meetingSummary.decisions.map((d: string) => `- ${d}`).join('\n')}\n\n`,
-      `## Participants\n\n${meetingSummary.participants.map((p: string) => `- ${p}`).join('\n')}\n\n`,
-      `## Summary\n\n${meetingSummary.mainSummary}`
+      `## Key Points\n\n${Array.isArray(meetingSummary.keyPoints) ? 
+        meetingSummary.keyPoints.map((p: string) => `- ${p}`).join('\n') : 
+        'No key points identified.'}\n\n`,
+      `## Summary\n\n${meetingSummary.mainSummary || 'No summary available.'}`
     ].join('');
     
     // Create a blob and download link
@@ -222,7 +277,7 @@ export default function MeetingUploadCard({ onUploadSuccess }: MeetingUploadCard
     const url = URL.createObjectURL(blob);
     const element = document.createElement('a');
     element.href = url;
-    element.download = `${meetingSummary.meetingTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_summary.md`;
+    element.download = `${(meetingSummary.meetingTitle || 'meeting_summary').replace(/[^a-z0-9]/gi, '_').toLowerCase()}_summary.md`;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
@@ -451,7 +506,12 @@ export default function MeetingUploadCard({ onUploadSuccess }: MeetingUploadCard
                   <FileText className="h-3 w-3 mr-1" /> View File
                 </a>
                 <button
-                  onClick={() => setShowSummaryPopup(true)}
+                  onClick={() => {
+                    // Only start transcription and show popup when View Summary is clicked
+                    if (url) {
+                      startTranscription(url, file?.name || 'meeting.mp3');
+                    }
+                  }}
                   className="text-xs text-purple-600 hover:underline flex items-center"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
