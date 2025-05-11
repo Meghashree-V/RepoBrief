@@ -190,7 +190,7 @@ export default function MeetingTranscription({ audioUrl, fileName }: MeetingTran
                       `This is an automated summary of the meeting transcript: ${transcriptionResult.text.substring(0, 500)}...` : 
                       'No summary available');
                   
-                  const formattedSummary = formatMeetingSummary(summaryText, transcriptionResult.utterances);
+                  const formattedSummary = formatMeetingSummary(summaryText, fileName, transcriptionResult.utterances);
                   console.log('Formatted summary:', formattedSummary);
                   
                   return (

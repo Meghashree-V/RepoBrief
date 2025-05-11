@@ -130,16 +130,21 @@ export function formatMeetingSummary(summaryText: string, fileName?: string, utt
   let meetingTitle = "Meeting Summary";
   
   // First try to generate a title from the filename if provided
-  if (fileName) {
-    // Remove file extension and replace underscores/hyphens with spaces
-    const cleanFileName = fileName.replace(/\.(mp3|wav|m4a|ogg)$/i, '')
-      .replace(/[_-]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-      
-    // If the filename looks meaningful (not just a timestamp), use it as a base for the title
-    if (cleanFileName && !/^\d+$/.test(cleanFileName) && cleanFileName.length > 3) {
-      meetingTitle = `Meeting: ${cleanFileName}`;
+  if (fileName && typeof fileName === 'string') {
+    try {
+      // Remove file extension and replace underscores/hyphens with spaces
+      const cleanFileName = fileName.replace(/\.(mp3|wav|m4a|ogg)$/i, '')
+        .replace(/[_-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+        
+      // If the filename looks meaningful (not just a timestamp), use it as a base for the title
+      if (cleanFileName && !/^\d+$/.test(cleanFileName) && cleanFileName.length > 3) {
+        meetingTitle = `Meeting: ${cleanFileName}`;
+      }
+    } catch (error) {
+      console.error('Error processing filename for meeting title:', error);
+      // Continue with default title if there's an error processing the filename
     }
   }
   
