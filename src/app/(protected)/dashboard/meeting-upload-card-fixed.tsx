@@ -209,11 +209,8 @@ export default function MeetingUploadCard({ onUploadSuccess }: MeetingUploadCard
     // Create formatted markdown content
     const markdownContent = [
       `# ${meetingSummary.meetingTitle}\n\n`,
-      `## Full Transcript\n\n${meetingSummary.transcript || 'Transcript not available'}\n\n`,
       `## Key Points\n\n${meetingSummary.keyPoints.map((p: string) => `- ${p}`).join('\n')}\n\n`,
-      `## Action Items\n\n${meetingSummary.actionItems.map((a: string) => `- ${a}`).join('\n')}\n\n`,
-      `## Decisions\n\n${meetingSummary.decisions.map((d: string) => `- ${d}`).join('\n')}\n\n`,
-      `## Participants\n\n${meetingSummary.participants.map((p: string) => `- ${p}`).join('\n')}\n\n`,
+      `## Full Transcript\n\n${meetingSummary.transcript || 'Transcript not available'}\n\n`,
       `## Summary\n\n${meetingSummary.mainSummary}`
     ].join('');
     

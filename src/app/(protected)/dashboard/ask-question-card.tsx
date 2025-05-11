@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { useProjectsCtx } from '@/hooks/project-context';
 import { Loader2, Save, Clock } from "lucide-react";
 import { api } from '@/trpc/react';
+import SafeMarkdown from '@/components/safe-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 
 interface SavedQuestion {
   id: string;
@@ -33,6 +36,8 @@ const AskQuestionCard = (props: AskQuestionCardProps = {}) => {
   const [loading, setLoading] = useState(false);
   const [localOpen, setLocalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Referenced files tab index (must be top-level for hooks order)
+  const [activeTab, setActiveTab] = useState(0);
   
   // Use props for open/setOpen if provided, otherwise use local state
   const open = props.open !== undefined ? props.open : localOpen;
@@ -110,8 +115,9 @@ const AskQuestionCard = (props: AskQuestionCardProps = {}) => {
       let data: any = {};
       try {
         data = await response.json();
+        console.log('[AskQuestionCard] API response:', data);
       } catch (jsonErr) {
-        // If JSON parsing fails, show generic error
+        console.error('[AskQuestionCard] Error parsing JSON:', jsonErr);
         setAnswer('Sorry, there was a problem processing the server response.');
         setLoading(false);
         return;
@@ -119,14 +125,23 @@ const AskQuestionCard = (props: AskQuestionCardProps = {}) => {
 
       if (!response.ok) {
         // Always show the error or answer from backend
-        setAnswer(data.answer || data.message || 'Failed to get answer');
+        // Clean and format the answer before displaying
+      let answer = data.answer || data.message || 'Failed to get answer';
+      answer = cleanMarkdown(answer);
+      // Optionally: split answer into points if it looks like a list
+      if (answer.includes('\n')) {
+        const points = answer.split(/\n+/).filter(Boolean);
+        if (points.length > 1) {
+          answer = points.map((p: string, i: number) => `${i + 1}. ${p.replace(/^[-*\d.\s]+/, '')}`).join('\n');
+        }
+      }
+      setAnswer(answer);
         setLoading(false);
         return;
       }
 
-      if (data.referencedFiles && Array.isArray(data.referencedFiles)) {
-        setReferencedFiles(data.referencedFiles);
-      }
+      // Always set referencedFiles, even if empty
+      setReferencedFiles(Array.isArray(data.referencedFiles) ? data.referencedFiles : []);
 
       if (data.answer) {
         setAnswer(data.answer);
@@ -134,10 +149,8 @@ const AskQuestionCard = (props: AskQuestionCardProps = {}) => {
         setAnswer("Sorry, no answer was generated.");
       }
     } catch (err: any) {
-      console.error("Error in handleAskQuestion:", err);
+      console.error("[AskQuestionCard] Error in handleAskQuestion:", err);
       setAnswer(err?.message || 'Sorry, there was an unexpected error.');
-      setLoading(false);
-      setAnswer("Sorry, there was an error getting the answer.");
       setReferencedFiles([]);
     } finally {
       setLoading(false);
@@ -150,13 +163,49 @@ const AskQuestionCard = (props: AskQuestionCardProps = {}) => {
   async function handleSaveAnswer() {
     if (!projectToUse?.id || !question || !answer) return;
     
+    // Format the answer before saving (same as display logic)
+    let formattedAnswer = answer;
+    const keywords = [
+      'TypeScript', 'Python', 'Yarn', 'npm', 'pnpm', 'ESLint', 'Prettier', 'Jest', 'TypeDoc', 'Docusaurus',
+      'Codecov', 'Docker', 'Quarto', 'EditorConfig', 'dlib', 'face_recognition', 'NumPy', 'SciPy', 'scikit-image', 'Pillow', 'OpenCV', 'CUDA', 'PyInstaller',
+      'Next.js', 'React', 'Redux', 'Tailwind', 'Express', 'Prisma', 'Gemini', 'LangChain', 'GPT', 'Turbo', 'Bun'
+    ];
+    keywords.forEach(word => {
+      const reg = new RegExp(`(?<!<b>)\\b${word}\\b(?!<\\/b>)`, 'g');
+      formattedAnswer = formattedAnswer.replace(reg, `<b>${word}</b>`);
+    });
+    // Remove all stray markdown bold/italic markers before further formatting
+    formattedAnswer = formattedAnswer
+      .replace(/\*\*(.*?)\*\*/gim, '<b>$1</b>')
+      .replace(/\*(.*?)\*/gim, '<i>$1</i>')
+      .replace(/\*\*/g, '') // Remove any remaining stray **
+      .replace(/\*/g, '')    // Remove any remaining stray *
+      .replace(/__([^_]+)__/g, '<b>$1</b>')
+      .replace(/_([^_]+)_/g, '<i>$1</i>');
+    const lines = formattedAnswer.split(/\n|\r|\u2022|\-/).map(line => line.trim()).filter(line => line.length > 0);
+    if (lines.length > 1) {
+      formattedAnswer = '<ul>' + lines.map(line => `<li>${line.replace(/^\*+\s*/, '')}</li>`).join('') + '</ul>';
+    } else {
+      formattedAnswer = formattedAnswer
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        .replace(/<b>(.*?)<\/b>/gim, '<b>$1</b>')
+        .replace(/<i>(.*?)<\/i>/gim, '<i>$1</i>')
+        .replace(/^\s*\- (.*$)/gim, '<li>$1</li>')
+        .replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>')
+        .replace(/`([^`]+)`/gim, '<code>$1</code>')
+        .replace(/\n{2,}/g, '</p><p>')
+        .replace(/([^<p>][^\n]+)(?=\n|$)/g, '<p>$1</p>');
+    }
+
     setSaving(true);
     try {
       // Use TRPC mutation instead of fetch
       const result = await saveAnswer.mutateAsync({
         projectId: projectToUse.id,
         question,
-        answer,
+        answer: formattedAnswer,
         referencedFiles
       });
       
@@ -173,38 +222,12 @@ const AskQuestionCard = (props: AskQuestionCardProps = {}) => {
     }
   }
 
-  // Main render for dashboard
-  if (!isQAPage) {
-    return (
-      <div className="w-full">
-        <form onSubmit={(e) => handleAskQuestion(e)}>
-          <textarea
-            placeholder="Which file should I edit to change the homepage?"
-            className="w-full p-3 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[120px] resize-none"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-          />
-          <div className="mt-4">
-            <button
-              type="submit"
-              disabled={loading || !question.trim()}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md transition-colors"
-            >
-              {loading ? 'Processing...' : 'Ask RepoBrief!'}
-            </button>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
+  // Main render for dashboard and QA page: always show dialog/modal UI
   return (
     <Card className="relative col-span-3">
-      <CardHeader>
-        <CardTitle>Ask a question</CardTitle>
-      </CardHeader>
       <CardContent>
         <form onSubmit={handleAskQuestion} className="flex flex-col gap-4">
+          <div className="font-semibold text-lg mb-2">Ask a question</div>
           <textarea
             className="w-full rounded border p-2"
             placeholder="Which file should I edit to change the homepage?"
@@ -212,238 +235,125 @@ const AskQuestionCard = (props: AskQuestionCardProps = {}) => {
             onChange={e => setQuestion(e.target.value)}
             rows={4}
           />
-          <Button type="submit" disabled={loading || !question.trim()}>{loading ? "Asking..." : "Ask RepoBrief"}</Button>
+          <Button type="submit" disabled={loading || !question.trim()}> {loading ? "Asking..." : "Ask RepoBrief"}</Button>
         </form>
-
-        {/* Saved Questions section removed from dashboard */}
       </CardContent>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) {
+          setViewingSaved(false);
+          setSelectedQuestion(null);
+        }
+      }}>
         <DialogContent className="flex flex-col items-start gap-4 py-6 px-6 max-w-4xl mx-auto bg-white" style={{background: 'white', maxHeight: '90vh', overflowY: 'auto'}}>
           <DialogTitle className="sr-only">Ask a Question Result</DialogTitle>
-          
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
               <div className="flex items-center bg-white rounded-full shadow p-2" style={{height: 40, width: 40}}>
                 <img src="/logo.png" alt="repobrief logo" style={{height: 30, width: 30, objectFit: 'contain'}} />
               </div>
-              {!viewingSaved && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleSaveAnswer} 
-                  disabled={saving || !answer}
-                  className="flex items-center gap-1"
-                >
-                  {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                  <span>Save Answer</span>
-                </Button>
-              )}
             </div>
-          </div>
-          
-          <div className="w-full">
-            {loading ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin mb-4" />
-                <p className="text-sm text-muted-foreground">Thinking...</p>
-              </div>
-            ) : (
-              <>
-                {/* Question */}
-                <div className="font-medium text-lg mb-4">
-                  {viewingSaved && selectedQuestion 
-                    ? selectedQuestion.question 
-                    : question}
-                </div>
-                
-                {/* Answer */}
-                <div className="text-sm">
-                  <div className="whitespace-pre-wrap">
-                    <div className="text-base leading-relaxed">
-                      {(viewingSaved && selectedQuestion 
-                        ? selectedQuestion.answer 
-                        : answer).split('\n').map((line: string, i: number) => {
-                        // Check if this is a section heading (all caps followed by colon)
-                        const isSectionHeading = /^[A-Z\s]+:/.test(line);
-                        
-                        // Check if this is a code snippet line
-                        const isCodeLine = line.trim().startsWith('<') || 
-                                          line.trim().startsWith('function') ||
-                                          line.trim().startsWith('import') ||
-                                          line.trim().startsWith('export') ||
-                                          line.trim().startsWith('class') ||
-                                          line.trim().startsWith('const') ||
-                                          line.trim().startsWith('let') ||
-                                          line.trim().startsWith('var') ||
-                                          /^\s*[a-zA-Z_]+\([^)]*\)\s*{/.test(line);
-                        
-                        // Check if this is a line number reference
-                        const isLineReference = /^Lines \d+-\d+|^Line \d+/.test(line);
-                        
-                        // Check if this is a list item
-                        const isList = /^[\-\*]\s/.test(line);
-                        
-                        if (isSectionHeading) {
-                          return (
-                            <div key={i} className="font-bold text-lg mt-6 mb-3 text-blue-700 border-b pb-1">
-                              {line}
-                            </div>
-                          );
-                        } else if (isLineReference) {
-                          return (
-                            <div key={i} className="font-semibold text-md mt-3 mb-2 text-gray-700">
-                              {line}
-                            </div>
-                          );
-                        } else if (isCodeLine) {
-                          return (
-                            <div key={i} className="font-mono text-sm bg-gray-100 p-1 my-1 rounded">
-                              {line}
-                            </div>
-                          );
-                        } else if (isList) {
-                          return (
-                            <div key={i} className="ml-4 mb-1">
-                              {/* Render HTML content if it contains HTML tags */}
-                              {line.includes('<b>') || line.includes('</b>') ? (
-                                <div dangerouslySetInnerHTML={{ __html: line }} />
-                              ) : (
-                                line
-                              )}
-                            </div>
-                          );
-                        } else if (line.trim() === '') {
-                          return <div key={i} className="h-3"></div>; // Empty line spacing
-                        } else {
-                          // Render HTML content if it contains HTML tags
-                          return (
-                            <div key={i} className="mb-2">
-                              {line.includes('<b>') || line.includes('</b>') ? (
-                                <div dangerouslySetInnerHTML={{ __html: line }} />
-                              ) : (
-                                line
-                              )}
-                            </div>
-                          );
-                        }
-                      })}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* File tabs at the bottom */}
-                {(viewingSaved && selectedQuestion 
-                  ? selectedQuestion.referencedFiles 
-                  : referencedFiles).length > 0 && (
-                  <div className="w-full mt-6 border rounded-md overflow-hidden" style={{ maxHeight: '400px' }}>
-                    {/* File tabs - only show unique file names */}
-                    <div className="flex overflow-x-auto bg-gray-100">
-                      {/* Filter to unique file names */}
-                      {Array.from(new Set((viewingSaved && selectedQuestion 
-                        ? selectedQuestion.referencedFiles 
-                        : referencedFiles).map(file => 
-                        file.fileName.split('/').pop() || file.fileName
-                      ))).map((uniqueFileName, index) => {
-                        // Find the first file with this name
-                        const fileIndex = (viewingSaved && selectedQuestion 
-                          ? selectedQuestion.referencedFiles 
-                          : referencedFiles).findIndex(file => 
-                          (file.fileName.split('/').pop() || file.fileName) === uniqueFileName
-                        );
-                        
-                        return (
-                          <button
-                            key={index}
-                            onClick={() => setActiveFileIndex(fileIndex)}
-                            className={`px-4 py-2 text-sm font-medium whitespace-nowrap ${
-                              fileIndex === activeFileIndex ? 'bg-blue-500 text-white' : 'hover:bg-gray-200'
-                            }`}
-                          >
-                            {uniqueFileName}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    
-                    {/* File content - show a cleaner preview with highlighted lines */}
-                    <div className="bg-gray-900 text-white p-4 overflow-x-auto" style={{ minHeight: '200px', maxHeight: '300px', overflowY: 'auto' }}>
-                      {(viewingSaved && selectedQuestion 
-                        ? selectedQuestion.referencedFiles 
-                        : referencedFiles)[activeFileIndex]?.sourceCode ? (
-                        <div className="font-mono text-xs">
-                          {/* Show matching lines if available */}
-                          {(viewingSaved && selectedQuestion 
-                            ? selectedQuestion.referencedFiles 
-                            : referencedFiles)[activeFileIndex]?.matchingLines && 
-                           (viewingSaved && selectedQuestion 
-                            ? selectedQuestion.referencedFiles 
-                            : referencedFiles)[activeFileIndex]?.matchingLines.length > 0 && (
-                            <div className="bg-gray-800 p-2 mb-4 rounded border border-yellow-500">
-                              <div className="font-bold text-yellow-400 mb-2">Matching Lines:</div>
-                              {(viewingSaved && selectedQuestion 
-                                ? selectedQuestion.referencedFiles 
-                                : referencedFiles)[activeFileIndex]?.matchingLines.map((lineNum: number, idx: number) => (
-                                <div key={idx} className="mb-1">
-                                  <span className="text-yellow-400">Line {lineNum}:</span>{' '}
-                                  <span className="text-green-300">
-                                    {(viewingSaved && selectedQuestion 
-                                      ? selectedQuestion.referencedFiles 
-                                      : referencedFiles)[activeFileIndex]?.matchingLineContents[idx]}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          
-                          {/* Show full source code */}
-                          {(viewingSaved && selectedQuestion 
-                            ? selectedQuestion.referencedFiles 
-                            : referencedFiles)[activeFileIndex].sourceCode.split('\n').map((line: string, idx: number) => {
-                            const lineNumber = idx + 1;
-                            const isMatchingLine = (viewingSaved && selectedQuestion 
-                              ? selectedQuestion.referencedFiles 
-                              : referencedFiles)[activeFileIndex]?.matchingLines?.includes(lineNumber);
-                            
-                            return (
-                              <div 
-                                key={idx} 
-                                className={`${isMatchingLine ? 'bg-yellow-900 -mx-4 px-4' : ''}`}
-                              >
-                                <span className="text-gray-500 mr-2 select-none">{lineNumber}</span>
-                                {line}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-gray-400">No source code available</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </>
+            {!viewingSaved && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleSaveAnswer} 
+                disabled={saving || !answer}
+                className="flex items-center gap-1"
+              >
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                <span>Save Answer</span>
+              </Button>
             )}
           </div>
-          
-          {/* Close button at the bottom */}
-          <div className="w-full mt-4 border-t pt-4 flex justify-center">
-            <div className="w-full h-8 bg-blue-600 rounded-md flex items-center justify-center">
-              <button 
-                onClick={() => {
-                  setOpen(false);
-                  setViewingSaved(false);
-                  setSelectedQuestion(null);
-                }}
-                className="text-white font-medium w-full h-full"
-              >
-                Close
-              </button>
-            </div>
+          {/* Question */}
+          <div className="font-medium text-lg mb-4">
+            {viewingSaved && selectedQuestion 
+              ? selectedQuestion.question 
+              : question}
           </div>
+          {/* Answer */}
+          <div className="text-sm w-full">
+            <div className="whitespace-pre-wrap">
+              <div className="text-base leading-relaxed prose prose-blue max-w-none">
+                {(() => {
+                  let ans = (viewingSaved && selectedQuestion ? selectedQuestion.answer : answer) || '';
+                  const keywords = [
+                    'TypeScript', 'Python', 'Yarn', 'npm', 'pnpm', 'ESLint', 'Prettier', 'Jest', 'TypeDoc', 'Docusaurus',
+                    'Codecov', 'Docker', 'Quarto', 'EditorConfig', 'dlib', 'face_recognition', 'NumPy', 'SciPy', 'scikit-image', 'Pillow', 'OpenCV', 'CUDA', 'PyInstaller',
+                    'Next.js', 'React', 'Redux', 'Tailwind', 'Express', 'Prisma', 'Gemini', 'LangChain', 'GPT', 'Turbo', 'Bun'
+                  ];
+                  function escapeRegExp(str: string) {
+                    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                  }
+                  keywords.forEach(word => {
+                    const safeWord = escapeRegExp(word);
+                    const reg = new RegExp(`\\b${safeWord}\\b`, 'gi');
+                    ans = ans.replace(reg, `**${word}**`);
+                  });
+                  return (
+                    <SafeMarkdown>
+                      {cleanMarkdown(ans)}
+                    </SafeMarkdown>
+                  );
+                })()}
+              </div>
+            </div>
+            {/* Code References Section */}
+            {(() => {
+              const files = (viewingSaved && selectedQuestion 
+                ? selectedQuestion.referencedFiles 
+                : referencedFiles);
+              if (!files || files.length === 0) return null;
+              return (
+                <div className="mt-6">
+                  <div className="font-semibold mb-2">Code References</div>
+                  <div className="space-y-4">
+                    {files.map((ref: any, idx: number) => (
+                      <div key={ref.fileName + idx} className="border rounded-md p-3 bg-white shadow-sm">
+                        <div className="font-mono text-sm text-blue-700 mb-2">
+                          {ref.fileName} <span className="text-gray-400">(lines {ref.startLine}-{ref.endLine})</span>
+                        </div>
+                        {ref.summary && (
+                          <div className="text-xs text-gray-500 mb-2">{ref.summary}</div>
+                        )}
+                        <pre className="rounded bg-gray-100 overflow-x-auto p-2 text-xs">
+                          <code>
+                            {ref.codeSnippet}
+                          </code>
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+          <button
+            onClick={() => {
+              setOpen(false);
+              setViewingSaved(false);
+              setSelectedQuestion(null);
+            }}
+            className="text-white font-medium w-full h-full"
+          >
+            Close
+          </button>
         </DialogContent>
       </Dialog>
     </Card>
   );
-};
+}
+
+// Utility to clean up orphaned markdown symbols
+function cleanMarkdown(md: string): string {
+  // Remove stray ** or * not surrounding text
+  let cleaned = md.replace(/\*\*(\s*)\*\*/g, '$1'); // Remove empty bold
+  cleaned = cleaned.replace(/\*\*(?![^\*]+\*\*)/g, ''); // Remove unmatched **
+  cleaned = cleaned.replace(/\*(\s*)\*/g, '$1'); // Remove empty italics
+  cleaned = cleaned.replace(/\*(?![^\*]+\*)/g, ''); // Remove unmatched *
+  // Optionally, remove other stray markdown symbols
+  return cleaned;
+}
 
 export default AskQuestionCard;

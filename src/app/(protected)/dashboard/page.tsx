@@ -1,10 +1,11 @@
 'use client'
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useUser } from "@clerk/nextjs"
 import { useProjectsCtx } from '@/hooks/project-context';
 import { Github, ExternalLink, Copy, Check } from 'lucide-react';
 import { CommitLog } from './commit-log';
 import AskQuestionCard from './ask-question-card';
+
 import MeetingUploadCard from "./meeting-upload-card";
 import TeamMembers from './team-members';
 import { toast } from 'sonner';
@@ -22,10 +23,13 @@ const DashboardPage = () => {
   const router = useRouter();
 
   // Generate invite link based on project ID
-  const getInviteLink = () => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    return `${baseUrl}/join/${projectId}`;
-  };
+  const [inviteLink, setInviteLink] = useState('');
+
+  useEffect(() => {
+    if (projectId) {
+      setInviteLink(`${window.location.origin}/join/${projectId}`);
+    }
+  }, [projectId]);
 
   const handleCopyInviteLink = () => {
     if (inviteLinkRef.current) {
@@ -141,7 +145,7 @@ const DashboardPage = () => {
               <input
                 ref={inviteLinkRef}
                 type="text"
-                value={getInviteLink()}
+                value={inviteLink}
                 readOnly
                 className="w-full p-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
@@ -203,9 +207,10 @@ const DashboardPage = () => {
 
       {/* Main content grid for Ask Question and Meeting cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Re-Embed Button (visible if project selected) */}
+
         {/* Ask Question Card */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
-          <h2 className="text-lg font-medium mb-4">Ask a question</h2>
           <AskQuestionCard />
         </div>
         {/* Meeting Card */}

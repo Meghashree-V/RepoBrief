@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
-import ReactMarkdown from "react-markdown";
+import SafeMarkdown from "@/components/safe-markdown";
+import { format } from "date-fns";
 import { api } from "@/trpc/react";
 import { useProjectsCtx } from "@/hooks/project-context";
 import { User } from "lucide-react";
@@ -122,7 +123,7 @@ export function CommitLog() {
                   <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2">
                     <span className="font-semibold text-gray-900">{safeCommit.authorName}</span>
                     <span className="text-xs text-gray-400">committed</span>
-                    <span className="text-xs text-gray-400 sm:ml-auto">{new Date(safeCommit.committedAt).toLocaleString()}</span>
+                    <span className="text-xs text-gray-400 sm:ml-auto">{format(new Date(safeCommit.committedAt), "yyyy-MM-dd HH:mm:ss")}</span>
                   </div>
                   <div className="flex items-center space-x-2 mt-1">
                     <span className="font-mono text-xs text-gray-400">{safeCommit.commitHash?.slice(0, 7)}</span>
@@ -130,7 +131,9 @@ export function CommitLog() {
                   </div>
                   {safeCommit.summary && (
                     <div className="border border-gray-100 bg-gray-50 rounded p-3 mt-3">
-                      <div className="prose prose-sm mb-0"><ReactMarkdown>{safeCommit.summary}</ReactMarkdown></div>
+                      <SafeMarkdown className="prose prose-sm mb-0">
+                        {safeCommit.summary}
+                      </SafeMarkdown>
                     </div>
                   )}
                 </div>

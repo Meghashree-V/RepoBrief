@@ -302,71 +302,37 @@ const QAPage = () => {
                 <div className="text-sm">
                   <div className="whitespace-pre-wrap">
                     <div className="text-base leading-relaxed">
-                      {(selectedQuestion ? selectedQuestion.answer : answer).split('\n').map((line: string, i: number) => {
-                        // Check if this is a section heading (all caps followed by colon)
-                        const isSectionHeading = /^[A-Z\s]+:/.test(line);
-                        
-                        // Check if this is a code snippet line
-                        const isCodeLine = line.trim().startsWith('<') || 
-                                          line.trim().startsWith('function') ||
-                                          line.trim().startsWith('import') ||
-                                          line.trim().startsWith('export') ||
-                                          line.trim().startsWith('class') ||
-                                          line.trim().startsWith('const') ||
-                                          line.trim().startsWith('let') ||
-                                          line.trim().startsWith('var') ||
-                                          /^\s*[a-zA-Z_]+\([^)]*\)\s*{/.test(line);
-                        
-                        // Check if this is a line number reference
-                        const isLineReference = /^Lines \d+-\d+|^Line \d+/.test(line);
-                        
-                        // Check if this is a list item
-                        const isList = /^[\-\*]\s/.test(line);
-                        
-                        if (isSectionHeading) {
-                          return (
-                            <div key={i} className="font-bold text-lg mt-6 mb-3 text-blue-700 border-b pb-1">
-                              {line}
-                            </div>
-                          );
-                        } else if (isLineReference) {
-                          return (
-                            <div key={i} className="font-semibold text-md mt-3 mb-2 text-gray-700">
-                              {line}
-                            </div>
-                          );
-                        } else if (isCodeLine) {
-                          return (
-                            <div key={i} className="font-mono text-sm bg-gray-100 p-1 my-1 rounded">
-                              {line}
-                            </div>
-                          );
-                        } else if (isList) {
-                          return (
-                            <div key={i} className="ml-4 mb-1">
-                              {/* Render HTML content if it contains HTML tags */}
-                              {line.includes('<b>') || line.includes('</b>') ? (
-                                <div dangerouslySetInnerHTML={{ __html: line }} />
-                              ) : (
-                                line
-                              )}
-                            </div>
-                          );
-                        } else if (line.trim() === '') {
-                          return <div key={i} className="h-3"></div>; // Empty line spacing
-                        } else {
-                          // Render HTML content if it contains HTML tags
-                          return (
-                            <div key={i} className="mb-2">
-                              {line.includes('<b>') || line.includes('</b>') ? (
-                                <div dangerouslySetInnerHTML={{ __html: line }} />
-                              ) : (
-                                line
-                              )}
-                            </div>
-                          );
-                        }
-                      })}
+                      {/* Import SafeMarkdown component to properly render markdown */}
+                      <div className="safe-markdown-content">
+                        {/* Process markdown content */}
+                        {(() => {
+                          const content = selectedQuestion ? selectedQuestion.answer : answer;
+                          
+                          // Process markdown to HTML
+                          let processed = content
+                            // Code blocks with language
+                            .replace(/```(\w+)\n([\s\S]*?)```/g, '<pre class="bg-gray-800 text-white p-3 rounded overflow-x-auto my-4"><code class="language-$1">$2</code></pre>')
+                            // Code blocks without language
+                            .replace(/```([\s\S]*?)```/g, '<pre class="bg-gray-800 text-white p-3 rounded overflow-x-auto my-4"><code>$1</code></pre>')
+                            // Inline code
+                            .replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 py-0.5 rounded">$1</code>')
+                            // Bold
+                            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                            // Italic
+                            .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+                            // Headers
+                            .replace(/^### (.*)$/gm, '<h3 class="text-lg font-bold mb-2">$1</h3>')
+                            .replace(/^## (.*)$/gm, '<h2 class="text-xl font-bold mb-2">$1</h2>')
+                            .replace(/^# (.*)$/gm, '<h1 class="text-2xl font-bold mb-2">$1</h1>')
+                            // Lists
+                            .replace(/^- (.*)$/gm, '<li>$1</li>')
+                            .replace(/(<li>.*<\/li>\n)+/g, '<ul class="list-disc pl-6 mb-4">$&</ul>')
+                            // Paragraphs (must come last)
+                            .replace(/^(?!<[uh\d]|<pre|<code|<strong|<em|<li|<ul)(.+)$/gm, '<p class="mb-4">$1</p>');
+                          
+                          return <div dangerouslySetInnerHTML={{ __html: processed }} />;
+                        })()}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -439,11 +405,12 @@ const QAPage = () => {
                           
                           alert('Answer saved successfully');
                           // Refresh the questions list
-                          if (project?.id) {
-                            const { data } = await api.project.getQuestions.useQuery(
-                              { projectId: project.id },
-                              { enabled: false }
-                            );
+                          // Use the refetch function instead of trying to call the hook directly
+                          try {
+                            // This will trigger a refetch of the questions data
+                            window.location.reload();
+                          } catch (refreshErr) {
+                            console.error('Error refreshing questions:', refreshErr);
                           }
                         } catch (err) {
                           console.error('Error saving answer:', err);

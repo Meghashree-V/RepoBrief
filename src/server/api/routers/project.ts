@@ -82,9 +82,8 @@ export const projectRouter = createTRPCRouter({
       });
 
       // Record the transaction
-      await ctx.db.StripeTransaction.create({
+      await ctx.db.stripeTransaction.create({
         data: {
-          userId: ctx.user.userId!,
           credits: -fileCount,
           user: { connect: { id: ctx.user.userId! } }
         }
@@ -147,9 +146,8 @@ export const projectRouter = createTRPCRouter({
             return 0;
           });
           
-          // Process up to 50 files to get more comprehensive coverage
-          const maxFilesToProcess = 50;
-          const filesToProcess = prioritizedDocs.slice(0, maxFilesToProcess);
+          // Process ALL files for maximum coverage
+          const filesToProcess = prioritizedDocs;
           
           // Process each file
           for (let i = 0; i < filesToProcess.length; i++) {

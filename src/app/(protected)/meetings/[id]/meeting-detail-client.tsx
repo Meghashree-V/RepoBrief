@@ -249,12 +249,11 @@ export default function MeetingDetailClient({ meetingId }: MeetingDetailClientPr
                     
                     {(() => {
                       // Create a summary from the transcript text if no summary is available
-                      const summaryText = transcriptionResult.summary?.text || 
-                        (transcriptionResult.text ? 
-                          `This is an automated summary of the meeting transcript: ${transcriptionResult.text.substring(0, 500)}...` : 
-                          'No summary available');
+                      const summaryText = transcriptionResult.summary?.text ||
+                        transcriptionResult.text ||
+                        'No summary available';
                       
-                      const formattedSummary = formatMeetingSummary(summaryText);
+                      const formattedSummary = formatMeetingSummary(summaryText, transcriptionResult.utterances);
                       console.log('Formatted summary:', formattedSummary);
                       
                       return (
@@ -264,93 +263,52 @@ export default function MeetingDetailClient({ meetingId }: MeetingDetailClientPr
                             <p className="text-gray-500">{formattedSummary.duration}</p>
                           </div>
                           
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            {/* Key Points */}
-                            <div className="bg-white rounded-lg p-4 shadow-sm">
-                              <div className="flex items-center mb-2">
-                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-2">
-                                  <span className="text-blue-600">📌</span>
+                          <div className="mb-4">
+                            <div className="mb-4">
+                              {/* Key Points */}
+                              <div className="bg-white rounded-lg p-4 shadow-sm">
+                                <div className="flex items-center mb-2">
+                                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-2">
+                                    <span className="text-blue-600">📌</span>
+                                  </div>
+                                  <h4 className="text-md font-semibold">Key Points</h4>
                                 </div>
-                                <h4 className="text-md font-semibold">Key Points</h4>
+                                {formattedSummary.keyPoints.length > 0 ? (
+                                  <ul className="list-disc pl-5 space-y-1">
+                                    {formattedSummary.keyPoints.map((point, index) => (
+                                      <li key={index} className="text-gray-700">{point}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-gray-500 italic">No key points identified</p>
+                                )}
                               </div>
-                              {formattedSummary.keyPoints.length > 0 ? (
-                                <ul className="list-disc pl-5 space-y-1">
-                                  {formattedSummary.keyPoints.map((point, index) => (
-                                    <li key={index} className="text-gray-700">{point}</li>
+
+                              {/* Participants section removed */}
+
+                              {/* Speaker Summaries */}
+                              {formattedSummary.speakerSummaries && formattedSummary.speakerSummaries.length > 0 && (
+                                <div className="bg-white rounded-lg p-4 shadow-sm mt-4">
+                                  <h4 className="text-md font-semibold mb-2">Speaker Summaries</h4>
+                                  {formattedSummary.speakerSummaries.map((speakerSummary, idx) => (
+                                    <div key={idx} className="mb-3">
+                                      <span className="font-semibold text-blue-700">{speakerSummary.speaker}:</span>
+                                      <span className="ml-2 text-gray-700">{speakerSummary.summary}</span>
+                                    </div>
                                   ))}
-                                </ul>
-                              ) : (
-                                <p className="text-gray-500 italic">No key points identified</p>
+                                </div>
                               )}
                             </div>
-                            
-                            {/* Action Items */}
-                            <div className="bg-white rounded-lg p-4 shadow-sm">
-                              <div className="flex items-center mb-2">
-                                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-2">
-                                  <span className="text-green-600">✓</span>
-                                </div>
-                                <h4 className="text-md font-semibold">Action Items</h4>
+
+                            <details className="mt-4">
+                              <summary className="text-blue-600 cursor-pointer font-semibold">
+                                ▼ View Full Summary
+                              </summary>
+                              <div className="mt-2 p-4 bg-white rounded-lg">
+                                {formattedSummary.mainSummary || 'No summary available'}
                               </div>
-                              {formattedSummary.actionItems.length > 0 ? (
-                                <ul className="list-disc pl-5 space-y-1">
-                                  {formattedSummary.actionItems.map((item, index) => (
-                                    <li key={index} className="text-gray-700">{item}</li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="text-gray-500 italic">No action items identified</p>
-                              )}
-                            </div>
-                            
-                            {/* Decisions */}
-                            <div className="bg-white rounded-lg p-4 shadow-sm">
-                              <div className="flex items-center mb-2">
-                                <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mr-2">
-                                  <span className="text-purple-600">🔍</span>
-                                </div>
-                                <h4 className="text-md font-semibold">Decisions</h4>
-                              </div>
-                              {formattedSummary.decisions.length > 0 ? (
-                                <ul className="list-disc pl-5 space-y-1">
-                                  {formattedSummary.decisions.map((decision, index) => (
-                                    <li key={index} className="text-gray-700">{decision}</li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="text-gray-500 italic">No decisions identified</p>
-                              )}
-                            </div>
-                            
-                            {/* Participants */}
-                            <div className="bg-white rounded-lg p-4 shadow-sm">
-                              <div className="flex items-center mb-2">
-                                <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center mr-2">
-                                  <span className="text-yellow-600">👥</span>
-                                </div>
-                                <h4 className="text-md font-semibold">Participants</h4>
-                              </div>
-                              {formattedSummary.participants.length > 0 ? (
-                                <ul className="list-disc pl-5 space-y-1">
-                                  {formattedSummary.participants.map((participant, index) => (
-                                    <li key={index} className="text-gray-700">{participant}</li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="text-gray-500 italic">No participants identified</p>
-                              )}
-                            </div>
+                            </details>
                           </div>
-                          
-                          {/* Full Summary Toggle */}
-                          <details className="mt-4">
-                            <summary className="text-blue-600 cursor-pointer font-semibold">
-                              ▼ View Full Summary
-                            </summary>
-                            <div className="mt-2 p-4 bg-white rounded-lg">
-                              {formattedSummary.mainSummary || 'No summary available'}
-                            </div>
-                          </details>
                         </div>
                       );
                     })()}

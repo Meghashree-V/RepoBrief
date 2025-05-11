@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -59,6 +60,89 @@ export default function MeetingsPage() {
     };
   }, []);
 
+  // Function to delete a meeting (with option for permanent deletion)
+  const deleteMeeting = async (meeting: Meeting, index: number, permanent: boolean = false) => {
+    try {
+      // Disable the button during deletion
+      const deleteButton = document.getElementById(`delete-${index}`) as HTMLButtonElement;
+      if (deleteButton) {
+        deleteButton.disabled = true;
+        deleteButton.innerText = 'Deleting...';
+      }
+      
+      // Immediately remove from UI for better user experience (optimistic update)
+      setMeetings(prev => prev.filter(m => m.url !== meeting.url));
+
+      // For temporary deletion, add to deleted meetings list to prevent it from reappearing
+      if (!permanent) {
+        const updatedDeletedUrls = [...deletedMeetingUrls, meeting.url];
+        console.log('Adding to deleted list:', meeting.url);
+        console.log('New deleted list:', updatedDeletedUrls);
+        setDeletedMeetingUrls(updatedDeletedUrls);
+        
+        // Save to localStorage
+        localStorage.setItem('deletedMeetingUrls', JSON.stringify(updatedDeletedUrls));
+      }
+      
+      // Clear any currently playing or transcribing state if it's this meeting
+      if (currentlyPlaying === meeting.url) {
+        setCurrentlyPlaying(null);
+      }
+      if (currentlyTranscribing === meeting.url) {
+        setCurrentlyTranscribing(null);
+      }
+
+      // Delete the file from Supabase storage
+      const path = meeting.location === 'meetings subfolder' ? `meetings/${meeting.name}` : meeting.name;
+      const { error: storageError } = await supabase.storage
+        .from('meetings')
+        .remove([path]);
+
+      if (storageError) {
+        console.error('Error deleting file from storage:', storageError);
+        toast.error('Failed to delete meeting from storage.');
+        // Restore the meeting to the list if deletion failed
+        setMeetings(prev => [meeting, ...prev]);
+        return;
+      } else {
+        console.log('Successfully deleted from storage:', path);
+      }
+
+      // Delete any associated transcription data from the database
+      const { error: dbError } = await supabase
+        .from('meeting_transcriptions')
+        .delete()
+        .eq('audio_url', meeting.url);
+
+      if (dbError) {
+        console.error('Error deleting transcription data:', dbError);
+      } else {
+        console.log('Successfully deleted transcription data for:', meeting.url);
+      }
+
+      // For permanent deletion, also remove from the deleted URLs list if it exists there
+      if (permanent && deletedMeetingUrls.includes(meeting.url)) {
+        const filteredUrls = deletedMeetingUrls.filter(url => url !== meeting.url);
+        setDeletedMeetingUrls(filteredUrls);
+        localStorage.setItem('deletedMeetingUrls', JSON.stringify(filteredUrls));
+      }
+
+      // Remove transcription from localStorage as well
+      const storageKey = `meeting_transcription_${btoa(meeting.url)}`;
+      localStorage.removeItem(storageKey);
+
+      // Refresh the meetings list
+      setTimeout(() => {
+        setRefreshTrigger(prev => prev + 1);
+      }, 500);
+
+      toast.success(permanent ? 'Meeting permanently deleted' : 'Meeting deleted successfully');
+    } catch (err) {
+      console.error('Error deleting meeting:', err);
+      toast.error('Failed to delete meeting. Please try again.');
+    }
+  };
+
   // Function to format file size
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return bytes + ' B';
@@ -115,32 +199,23 @@ export default function MeetingsPage() {
       setCurrentlyPlaying(null);
       setCurrentlyTranscribing(null);
       
-      // First try to list all files in the bucket to see what's there
+      // Fetch all files from the meetings bucket
       const { data: allFiles, error: allFilesError } = await supabase.storage
-        .from("meetings")
-        .list();
+        .from('meetings')
+        .list('', {
+          sortBy: { column: 'created_at', order: 'desc' }
+        });
       
-      console.log("All files in bucket:", allFiles);
+      // Fetch files from the meetings subfolder if it exists
+      const { data: meetingsSubfolderFiles, error: meetingsSubfolderError } = await supabase.storage
+        .from('meetings')
+        .list('meetings', {
+          sortBy: { column: 'created_at', order: 'desc' }
+        });
       
-      // Then try the meetings subfolder
-      const { data: meetingsData, error: meetingsError } = await supabase.storage
-        .from("meetings")
-        .list("meetings");
+      // Combine all MP3 files from both locations
+      const mp3Files: Meeting[] = [];
       
-      console.log("Files in meetings subfolder:", meetingsData);
-      
-      // Store debug info
-      setDebug({ 
-        allFiles,
-        allFilesError,
-        meetingsSubfolder: meetingsData, 
-        meetingsError 
-      });
-      
-      // Combine files from both locations
-      let mp3Files = [];
-      
-      // Add files from root if they exist and are MP3s
       if (allFiles && !allFilesError) {
         const rootMp3s = allFiles.filter(file => 
           file.name && file.name.toLowerCase().endsWith('.mp3')
@@ -155,9 +230,8 @@ export default function MeetingsPage() {
         })));
       }
       
-      // Add files from meetings subfolder if they exist and are MP3s
-      if (meetingsData && !meetingsError) {
-        const subfolderMp3s = meetingsData.filter(file => 
+      if (meetingsSubfolderFiles && !meetingsSubfolderError) {
+        const subfolderMp3s = meetingsSubfolderFiles.filter(file => 
           file.name && file.name.toLowerCase().endsWith('.mp3')
         );
         
@@ -170,49 +244,38 @@ export default function MeetingsPage() {
         })));
       }
       
-      console.log("Combined MP3 files:", mp3Files);
+      // Filter out any deleted meetings
+      const filteredMeetings = mp3Files.filter(meeting => 
+        !deletedMeetingUrls.includes(meeting.url) && 
+        !deletedMeetingUrls.includes(decodeURIComponent(meeting.url))
+      );
       
-      // Filter out any meetings that are in the deleted list
-      // Use a more robust check that handles URL encoding differences
-      mp3Files = mp3Files.filter(meeting => {
-        // Check if this meeting URL (or a normalized version) is in our deleted list
-        const isDeleted = deletedMeetingUrls.some(deletedUrl => {
-          // Try different normalization approaches
-          return (
-            meeting.url === deletedUrl ||
-            decodeURIComponent(meeting.url) === decodeURIComponent(deletedUrl) ||
-            meeting.url.includes(deletedUrl) ||
-            deletedUrl.includes(meeting.url)
-          );
-        });
-        
-        if (isDeleted) {
-          console.log('Filtering out deleted meeting:', meeting.name);
-        }
-        
-        return !isDeleted;
+      // Sort by creation date (newest first)
+      filteredMeetings.sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return dateB - dateA;
       });
       
-      // Sort by creation date, newest first
-      mp3Files.sort((a, b) => {
-        if (!a.created_at) return 1;
-        if (!b.created_at) return -1;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      setMeetings(filteredMeetings);
+      setLoading(false);
+      
+      // Debug info
+      setDebug({
+        totalFiles: mp3Files.length,
+        filteredFiles: filteredMeetings.length,
+        deletedUrls: deletedMeetingUrls,
+        allFilesError,
+        meetingsSubfolderError
       });
       
-      setMeetings(mp3Files);
-      
-      if (mp3Files.length === 0) {
-        console.log("No MP3 files found in any location");
-      }
     } catch (err) {
       console.error("Error fetching meetings:", err);
-      setError("Failed to load meetings");
-    } finally {
+      setError("Failed to load meetings. Please try again later.");
       setLoading(false);
     }
   };
-
+  
   // Trigger refresh when component mounts or refreshTrigger changes
   useEffect(() => {
     refreshMeetings();
@@ -220,67 +283,52 @@ export default function MeetingsPage() {
 
   // Function to handle successful upload
   const handleUploadSuccess = () => {
-    console.log("Upload successful, refreshing meetings list");
-    // Wait a moment for Supabase to process the upload
-    setTimeout(() => {
-      setRefreshTrigger(prev => prev + 1);
-    }, 1500);
+    toast.success("Meeting uploaded successfully!");
+    // Refresh the meetings list
+    setRefreshTrigger(prev => prev + 1);
   };
 
   return (
-    <div className="flex flex-col items-center w-full px-4 pb-6">
-      <div className="w-full max-w-3xl mt-4 mb-4 bg-white rounded-lg shadow-md overflow-hidden">
-        <div className="bg-blue-600 text-white px-6 py-4">
-          <h2 className="text-xl font-bold">Upload Meeting</h2>
-        </div>
-        <div className="p-6">
-          <MeetingUploadCard onUploadSuccess={handleUploadSuccess} />
-        </div>
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-2xl font-bold text-gray-800">Your Meetings</h1>
+        <MeetingUploadCard onUploadSuccess={handleUploadSuccess} />
       </div>
       
-      <div className="w-full max-w-3xl bg-white rounded-lg shadow-md overflow-hidden mt-0">
-        <div className="bg-blue-600 text-white px-6 py-4 flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-bold">All Meetings</h2>
-            <p className="text-blue-100 text-sm">Listen to your recorded meetings</p>
-          </div>
-          <button 
-            onClick={() => setRefreshTrigger(prev => prev + 1)}
-            className="p-2 bg-blue-700 rounded-full hover:bg-blue-800 transition-colors"
-            title="Refresh meetings list"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="p-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-700">Recorded Meetings</h2>
+          <p className="text-sm text-gray-500">View, transcribe, and manage your meeting recordings</p>
         </div>
         
         {loading ? (
-          <div className="flex justify-center items-center p-8">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+          <div className="p-8 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-blue-600 mb-4"></div>
+            <p className="text-gray-600">Loading your meetings...</p>
           </div>
         ) : error ? (
-          <div className="p-6 text-center">
-            <div className="text-red-500 bg-red-50 p-4 rounded-lg inline-flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              {error}
+          <div className="p-8 text-center">
+            <div className="bg-red-100 text-red-700 p-4 rounded-lg inline-block">
+              <p>{error}</p>
+              <button 
+                onClick={() => setRefreshTrigger(prev => prev + 1)}
+                className="mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              >
+                Try Again
+              </button>
             </div>
           </div>
         ) : meetings.length === 0 ? (
           <div className="p-8 text-center">
-            <div className="bg-gray-100 rounded-full p-4 inline-block mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
+            <div className="bg-blue-50 text-blue-700 p-6 rounded-lg inline-block">
+              <p className="mb-2">You don't have any meetings yet.</p>
+              <p className="text-sm text-blue-600">Upload your first meeting recording to get started!</p>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-1">No meeting recordings found</h3>
-            <p className="text-gray-500">Upload your first meeting recording to get started</p>
+            
             {debug && (
-              <div className="mt-4 text-left">
-                <details>
-                  <summary className="text-xs text-gray-500 cursor-pointer">Debug Info (Click to expand)</summary>
+              <div className="mt-8">
+                <details className="text-left">
+                  <summary className="text-sm text-gray-500 cursor-pointer">Debug Info</summary>
                   <pre className="text-xs text-gray-500 mt-2 bg-gray-100 p-2 rounded overflow-auto max-h-40">
                     {JSON.stringify(debug, null, 2)}
                   </pre>
@@ -361,99 +409,26 @@ export default function MeetingsPage() {
                   >
                     View Meeting
                   </button>
+                  
                   <button
-                    onClick={async () => {
-                      if (confirm('Are you sure you want to delete this meeting?')) {
-                        try {
-                          // Disable the button during deletion
-                          const deleteButton = document.activeElement as HTMLButtonElement;
-                          if (deleteButton) {
-                            deleteButton.disabled = true;
-                            deleteButton.innerText = 'Deleting...';
-                          }
-                          
-                          // Immediately remove from UI for better user experience
-                          setMeetings(prevMeetings => prevMeetings.filter(m => m.url !== meeting.url));
-                          
-                          // Add to deleted meetings list to prevent it from reappearing
-                          const updatedDeletedUrls = [...deletedMeetingUrls, meeting.url];
-                          console.log('Adding to deleted list:', meeting.url);
-                          console.log('New deleted list:', updatedDeletedUrls);
-                          setDeletedMeetingUrls(updatedDeletedUrls);
-                          
-                          // Save multiple versions of the URL to handle encoding differences
-                          const urlsToStore = [
-                            meeting.url,
-                            decodeURIComponent(meeting.url),
-                            meeting.name
-                          ];
-                          
-                          // Add all versions to our deleted list
-                          const robustDeletedUrls = [...deletedMeetingUrls, ...urlsToStore];
-                          
-                          // Save to localStorage to persist across page reloads
-                          localStorage.setItem('deletedMeetingUrls', JSON.stringify(robustDeletedUrls));
-                          
-                          // Also save the meeting name separately for extra robustness
-                          const deletedNames = JSON.parse(localStorage.getItem('deletedMeetingNames') || '[]');
-                          deletedNames.push(meeting.name);
-                          localStorage.setItem('deletedMeetingNames', JSON.stringify(deletedNames));
-                          
-                          // Clear any currently playing or transcribing state if it's this meeting
-                          if (currentlyPlaying === meeting.url) {
-                            setCurrentlyPlaying(null);
-                          }
-                          if (currentlyTranscribing === meeting.url) {
-                            setCurrentlyTranscribing(null);
-                          }
-                          
-                          // Delete the file from storage
-                          const path = meeting.location === 'meetings subfolder' ? `meetings/${meeting.name}` : meeting.name;
-                          const { error: storageError } = await supabase.storage
-                            .from('meetings')
-                            .remove([path]);
-                            
-                          if (storageError) {
-                            console.error('Error deleting file from storage:', storageError);
-                            // Continue anyway - we'll keep it in our blacklist
-                          } else {
-                            console.log('Successfully deleted from storage:', path);
-                          }
-                          
-                          // Also delete any associated transcription data
-                          const { error: dbError } = await supabase
-                            .from('meeting_transcriptions')
-                            .delete()
-                            .eq('audio_url', meeting.url);
-                            
-                          if (dbError) {
-                            console.error('Error deleting transcription data:', dbError);
-                          } else {
-                            console.log('Successfully deleted transcription data for:', meeting.url);
-                          }
-                          
-                          // Remove from localStorage as well
-                          const storageKey = `meeting_transcription_${encodeURIComponent(meeting.url)}`;
-                          localStorage.removeItem(storageKey);
-                          
-                          // Force a complete refresh to ensure everything is in sync
-                          setTimeout(() => {
-                            setRefreshTrigger(prev => prev + 1);
-                          }, 500);
-                          
-                          toast.success('Meeting deleted successfully');
-                        } catch (err) {
-                          console.error('Error deleting meeting:', err);
-                          toast.error('Failed to delete meeting. Please try again.');
-                          
-                          // Even if there's an error, keep the meeting in our blacklist
-                          // to prevent it from reappearing
+                    id={`delete-${index}`}
+                    onClick={() => {
+                      const result = confirm(`Delete "${getDisplayName(meeting.name)}"?\n\nChoose OK for temporary deletion (can be recovered by admin)\nChoose Cancel to see permanent deletion option`);
+                      
+                      if (result) {
+                        // User chose temporary deletion
+                        deleteMeeting(meeting, index, false);
+                      } else {
+                        // User canceled, ask about permanent deletion
+                        const permanentDelete = confirm(`⚠️ PERMANENTLY delete "${getDisplayName(meeting.name)}"?\n\nThis action CANNOT be undone. The meeting will be completely removed from all storage.`);
+                        if (permanentDelete) {
+                          deleteMeeting(meeting, index, true);
                         }
                       }
                     }}
                     className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-md transition-colors"
                   >
-                    Delete Meeting
+                    Delete
                   </button>
                 </div>
               </div>

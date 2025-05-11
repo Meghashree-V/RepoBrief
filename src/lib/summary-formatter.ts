@@ -7,26 +7,61 @@
  * @param summaryText The original summary text from AssemblyAI
  * @returns Formatted summary with key points extracted
  */
-export function formatMeetingSummary(summaryText: string): {
+export function formatMeetingSummary(summaryText: string, utterances?: { speaker: string; text: string; start: number; end: number }[]): {
   keyPoints: string[];
-  actionItems: string[];
-  decisions: string[];
-  participants: string[];
   mainSummary: string;
   meetingTitle: string;
   duration: string;
   transcript?: string;
+  speakerSummaries?: { speaker: string; summary: string }[];
 } {
+  let speakerSummaries: { speaker: string; summary: string }[] = [];
+
+  if (utterances && Array.isArray(utterances) && utterances.length > 0) {
+    const speakerMap: { [speaker: string]: string[] } = {};
+    for (const u of utterances) {
+      if (u && typeof u.speaker === 'string' && typeof u.text === 'string') {
+        // Create the array if it doesn't exist
+        if (!speakerMap[u.speaker]) {
+          speakerMap[u.speaker] = [];
+        }
+        
+        // Get a reference to the array
+        const speakerTexts = speakerMap[u.speaker];
+        
+        // Only push if it's a valid array
+        if (speakerTexts && Array.isArray(speakerTexts)) {
+          speakerTexts.push(u.text);
+        }
+      }
+    }
+    
+    // Create speaker summaries with a safer approach
+    speakerSummaries = [];
+    for (const speaker of Object.keys(speakerMap)) {
+      const texts = speakerMap[speaker];
+      if (texts && Array.isArray(texts)) {
+        speakerSummaries.push({
+          speaker,
+          summary: texts.join(' ')
+        });
+      } else {
+        speakerSummaries.push({
+          speaker,
+          summary: ''
+        });
+      }
+    }
+  }
+
   if (!summaryText) {
     return {
       keyPoints: [],
-      actionItems: [],
-      decisions: [],
-      participants: [],
       mainSummary: "No summary available",
       meetingTitle: "Untitled Meeting",
       duration: "Unknown duration",
-      transcript: ""
+      transcript: "",
+      speakerSummaries
     };
   }
 
@@ -67,181 +102,27 @@ export function formatMeetingSummary(summaryText: string): {
     if (wordCount >= 5 && wordCount <= 20) score += 2;
     
     // Avoid filler sentences
-    if (/\b(um|uh|like|you know|I mean)\b/i.test(sentence)) score -= 3;
-    
-    // Prefer sentences with concrete information
-    if (/\b(percent|\d+|statistic|figure|data|result|outcome)\b/i.test(sentence)) score += 2;
-    if (/\b(increasing|decreasing|improved|reduced|changed|impact)\b/i.test(sentence)) score += 1;
+    if (!/^(however|moreover|furthermore|in addition|additionally|also|too|as well)/i.test(sentence)) {
+      score += 1;
+    }
     
     return { sentence, score };
   });
-
-  // Sort by score and get top key points
+  
+  // Sort by score and take the top ones
   const keyPoints = scoredSentences
     .sort((a, b) => b.score - a.score)
-    .slice(0, 5)
+    .slice(0, 10)
     .map(item => item.sentence);
-
-  // Enhanced action item detection
-  const actionItemRegexes = [
-    // Strong action verbs and assignments
-    /\b(will|shall|must|need to|going to|has to|have to|required to|assigned to)\s+[^.!?]*?(complete|finish|deliver|prepare|create|implement|develop|follow up|contact|call|email|review|update|check|research)\b[^.!?]*?[.!?]/gi,
-    
-    // Clear markers of tasks
-    /\b(action item|task|todo|to-do|assignment|deliverable|responsibility|follow-up|next step)\s+[^.!?]*?[.!?]/gi,
-    
-    // Deadlines and timeframes
-    /\b(by|before|due|deadline|within|no later than)\s+[^.!?]*?\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december|\d{1,2}(st|nd|rd|th)?|week|month|quarter|year)\b[^.!?]*?[.!?]/gi,
-    
-    // Agreed actions
-    /\b(agreed|committed|promised|volunteered)\s+to\s+[^.!?]*?[.!?]/gi,
-    
-    // Names followed by verbs indicating responsibility
-    /\b([A-Z][a-z]+)\s+(will|should|is going to|has to|needs to)\s+[^.!?]*?[.!?]/g
-  ];
-
-  // Extract action items with improved approach
-  const actionItems: string[] = [];
-  // First pass: use regexes
-  actionItemRegexes.forEach(regex => {
-    const matches = summaryText.match(regex) || [];
-    matches.forEach(match => {
-      const cleaned = match.trim();
-      if (!actionItems.includes(cleaned) && cleaned.length > 15) {
-        actionItems.push(cleaned);
-      }
-    });
-  });
   
-  // Second pass: check for action-oriented sentences that weren't caught by regexes
-  if (actionItems.length < 3) {
-    cleanedSentences.forEach(sentence => {
-      // Only check if we don't already have this sentence
-      if (!actionItems.includes(sentence)) {
-        const lowerSentence = sentence.toLowerCase();
-        // Check for clear action indicators
-        if (
-          ((lowerSentence.includes("will") || 
-            lowerSentence.includes("should") || 
-            lowerSentence.includes("need") ||
-            lowerSentence.includes("task") ||
-            lowerSentence.includes("action") ||
-            lowerSentence.includes("follow") ||
-            lowerSentence.includes("by") &&
-            lowerSentence.includes("date")) &&
-           (lowerSentence.includes("complete") ||
-            lowerSentence.includes("prepare") ||
-            lowerSentence.includes("create") ||
-            lowerSentence.includes("implement") ||
-            lowerSentence.includes("review") ||
-            lowerSentence.includes("update")))
-        ) {
-          actionItems.push(sentence);
-        }
-      }
-    });
+  // If we don't have enough key points, add some from the beginning of the text
+  if (keyPoints.length < 3 && cleanedSentences.length > 3) {
+    const additionalPoints = cleanedSentences
+      .filter(sentence => !keyPoints.includes(sentence))
+      .slice(0, 5 - keyPoints.length);
+    
+    keyPoints.push(...additionalPoints);
   }
-
-  // Enhanced decision detection
-  const decisionRegexes = [
-    // Clear decision markers
-    /\b(decided|determined|resolved|agreed|approved|confirmed|finalized|concluded|reached a decision)\s+[^.!?]*?[.!?]/gi,
-    
-    // Decision outcomes
-    /\b(decision|agreement|conclusion|consensus|resolution|outcome|result)\s+(was|is|has been)\s+[^.!?]*?[.!?]/gi,
-    
-    // Team/group decisions
-    /\b(team|group|committee|board|everyone|all)\s+(decided|agreed|determined|concluded)\s+[^.!?]*?[.!?]/gi,
-    
-    // Formal decisions with specific markers
-    /\b(motion|proposal|recommendation)\s+(was|is|has been)\s+(approved|accepted|passed|adopted)\b[^.!?]*?[.!?]/gi
-  ];
-
-  // Extract decisions with improved approach
-  const decisions: string[] = [];
-  // First pass: use regexes
-  decisionRegexes.forEach(regex => {
-    const matches = summaryText.match(regex) || [];
-    matches.forEach(match => {
-      const cleaned = match.trim();
-      if (!decisions.includes(cleaned) && cleaned.length > 15) {
-        decisions.push(cleaned);
-      }
-    });
-  });
-  
-  // Second pass: check for decision-oriented sentences that weren't caught by regexes
-  if (decisions.length < 3) {
-    cleanedSentences.forEach(sentence => {
-      // Only check if we don't already have this sentence
-      if (!decisions.includes(sentence)) {
-        const lowerSentence = sentence.toLowerCase();
-        // Check for clear decision indicators
-        if (
-          (lowerSentence.includes("decided") || 
-           lowerSentence.includes("agreed") || 
-           lowerSentence.includes("determined") ||
-           lowerSentence.includes("approved") ||
-           lowerSentence.includes("conclusion") ||
-           lowerSentence.includes("consensus")) &&
-          !lowerSentence.includes("will") && // Avoid action items
-          !lowerSentence.includes("should") // Avoid recommendations
-        ) {
-          decisions.push(sentence);
-        }
-      }
-    });
-  }
-
-  // Enhanced participant detection
-  const participantRegexes = [
-    // Explicit mentions of participants
-    /\b(participant|attendee|present|joined|attended by|speaker)s?\b[^.!?]*?[.!?]/gi,
-    
-    // Lists of names, possibly with titles
-    /\b(present|attending|participants|attendees)\s+(were|included|consisted of)\s+[^.!?]*?[.!?]/gi,
-    
-    // Meeting led by or organized by
-    /\b(meeting|call|discussion|session)\s+(was|is)\s+(led by|chaired by|organized by|facilitated by)\s+[^.!?]*?[.!?]/gi,
-    
-    // Name patterns for individual participants
-    /\b([A-Z][a-z]+\s+[A-Z][a-z]+)\s+(from|of|at|representing|speaking for)\s+[^.!?]*?[.!?]/g
-  ];
-
-  // Extract participants with improved approach
-  const participantMatches: string[] = [];
-  participantRegexes.forEach(regex => {
-    const matches = summaryText.match(regex) || [];
-    matches.forEach(match => {
-      const cleaned = match.trim();
-      if (!participantMatches.includes(cleaned) && cleaned.length > 10) {
-        participantMatches.push(cleaned);
-      }
-    });
-  });
-  
-  // Extract names from sentences about participants
-  const nameExtractorRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
-  const potentialNames: string[] = [];
-  
-  participantMatches.forEach(match => {
-    const nameMatches = [...match.matchAll(nameExtractorRegex)];
-    nameMatches.forEach(nameMatch => {
-      const name = nameMatch[0];
-      // Exclude common non-name words that might be capitalized
-      if (![
-        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
-        "January", "February", "March", "April", "May", "June", "July", 
-        "August", "September", "October", "November", "December",
-        "Participants", "Attendees", "Present", "Meeting", "The", "A", "An", "And"
-      ].includes(name) && name.length > 3) {
-        potentialNames.push(name);
-      }
-    });
-  });
-  
-  // Clean up and remove duplicates from participants list
-  const participants = Array.from(new Set(potentialNames));
 
   // Improved meeting title extraction
   let meetingTitle = "Meeting Summary";
@@ -296,37 +177,15 @@ export function formatMeetingSummary(summaryText: string): {
     }
   }
 
-  // Select the best items for each category and ensure we have at least 3 items in each category if possible
+  // Select the best items for key points
   const bestKeyPoints = keyPoints.slice(0, 5); // Up to 5 key points
-  
-  // Sort action items by length (preferring medium-length ones) then take top 3-5
-  const sortedActionItems = [...actionItems].sort((a, b) => {
-    // Prefer items between 50-150 characters
-    const aScore = Math.abs(100 - a.length);
-    const bScore = Math.abs(100 - b.length);
-    return aScore - bScore;
-  });
-  const bestActionItems = sortedActionItems.slice(0, Math.min(5, sortedActionItems.length));
-  
-  // Sort decisions similarly
-  const sortedDecisions = [...decisions].sort((a, b) => {
-    const aScore = Math.abs(100 - a.length);
-    const bScore = Math.abs(100 - b.length);
-    return aScore - bScore;
-  });
-  const bestDecisions = sortedDecisions.slice(0, Math.min(5, sortedDecisions.length));
-  
-  // Limit participants to 5
-  const bestParticipants = participants.slice(0, 5);
 
   return {
     keyPoints: bestKeyPoints,
-    actionItems: bestActionItems,
-    decisions: bestDecisions,
-    participants: bestParticipants,
     mainSummary: summaryText,
     meetingTitle,
     duration,
-    transcript: "" // This will be set by the calling function
+    transcript: summaryText,
+    speakerSummaries
   };
 }

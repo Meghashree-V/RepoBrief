@@ -1,3 +1,4 @@
+"use client";
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { Sidebar } from 'lucide-react'
 import React from 'react'

@@ -5,9 +5,12 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // Create a GoogleGenerativeAI instance directly
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
+import { generateEmbedding } from "@/lib/embeddingPipeline";
+
 export async function POST(req: NextRequest) {
   try {
     const { question, projectId } = await req.json();
+    const semanticMode = req.nextUrl?.searchParams?.get('semantic') === 'true';
     
     if (!question || !projectId) {
       return NextResponse.json(
@@ -22,7 +25,8 @@ export async function POST(req: NextRequest) {
     console.log("[QA API] Fetching files for this project");
     const files = await prisma.sourceCodeEmbedding.findMany({
       where: { projectId },
-      take: 10,
+      // For semantic mode, fetch all. For legacy, fetch 10 for perf
+      take: semanticMode ? undefined : 10,
     });
     
     console.log(`[QA API] Found ${files.length} files`);
@@ -35,41 +39,68 @@ export async function POST(req: NextRequest) {
       });
     }
     
-    // Simple text-based relevance scoring
-    const scoredFiles = files.map(file => {
-      // Calculate a simple relevance score based on text matching
-      const lowerQuestion = question.toLowerCase();
-      const lowerFileName = file.fileName.toLowerCase();
-      const lowerSummary = file.summary.toLowerCase();
-      const lowerSourceCode = (file.sourceCode || '').toLowerCase();
-      
-      let score = 0;
-      
-      // Check for keyword matches in file name
-      if (lowerFileName.includes(lowerQuestion)) score += 5;
-      
-      // Check for keyword matches in summary
-      if (lowerSummary.includes(lowerQuestion)) score += 3;
-      
-      // Check for keyword matches in source code
-      if (lowerSourceCode.includes(lowerQuestion)) score += 2;
-      
-      // Split question into words and check for individual word matches
-      const words = lowerQuestion.split(/\s+/).filter(w => w.length > 3);
-      for (const word of words) {
-        if (lowerFileName.includes(word)) score += 2;
-        if (lowerSummary.includes(word)) score += 1;
-        if (lowerSourceCode.includes(word)) score += 0.5;
+    let topFiles = [];
+    if (semanticMode) {
+      // --- SEMANTIC SEARCH MODE ---
+      try {
+        const questionEmbedding = await generateEmbedding(question);
+        // Compute cosine similarity for each file
+        const scoredFiles = files.map(file => {
+          if (!file.embedding || !Array.isArray(file.embedding) || file.embedding.length !== questionEmbedding.length) {
+            return { file, similarity: -1 };
+          }
+          // Cosine similarity
+          const dot = file.embedding.reduce((sum, v, i) => sum + v * questionEmbedding[i], 0);
+          const normA = Math.sqrt(file.embedding.reduce((sum, v) => sum + v * v, 0));
+          const normB = Math.sqrt(questionEmbedding.reduce((sum, v) => sum + v * v, 0));
+          const similarity = (normA && normB) ? dot / (normA * normB) : -1;
+          return { file, similarity };
+        });
+        // Sort by similarity and take top 5
+        topFiles = scoredFiles
+          .sort((a, b) => b.similarity - a.similarity)
+          .slice(0, 5)
+          .map(item => item.file);
+      } catch (err) {
+        console.error('[QA API] Error in semantic search:', err);
+        topFiles = files.slice(0, 5);
       }
-      
-      return { file, score };
-    });
-    
-    // Sort by score and take top results
-    const topFiles = scoredFiles
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5)
-      .map(item => item.file);
+    } else {
+      // --- LEGACY KEYWORD MODE ---
+      const scoredFiles = files.map(file => {
+        // Calculate a simple relevance score based on text matching
+        const lowerQuestion = question.toLowerCase();
+        const lowerFileName = file.fileName.toLowerCase();
+        const lowerSummary = file.summary?.toLowerCase();
+        const lowerSourceCode = (file.sourceCode || '').toLowerCase();
+        
+        let score = 0;
+        
+        // Check for keyword matches in file name
+        if (lowerFileName.includes(lowerQuestion)) score += 5;
+        
+        // Check for keyword matches in summary
+        if (lowerSummary.includes(lowerQuestion)) score += 3;
+        
+        // Check for keyword matches in source code
+        if (lowerSourceCode.includes(lowerQuestion)) score += 2;
+        
+        // Split question into words and check for individual word matches
+        const words = lowerQuestion.split(/\s+/).filter((w: string) => w.length > 3);
+        for (const word of words) {
+          if (lowerFileName.includes(word)) score += 2;
+          if (lowerSummary.includes(word)) score += 1;
+          if (lowerSourceCode.includes(word)) score += 0.5;
+        }
+        
+        return { file, score };
+      });
+      // Sort by score and take top results
+      topFiles = scoredFiles
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+        .map(item => item.file);
+    }
     
     // Build context string from top files
     let context = "";
@@ -84,7 +115,22 @@ export async function POST(req: NextRequest) {
     
     // Construct prompt for Gemini
     console.log("[QA API] Constructing prompt for Gemini");
-    const prompt = `You are an AI code assistant. Use the following context from the user's codebase to answer the question.\n\nContext:\n${context}\n\nQuestion: ${question}\nAnswer:`;
+    const prompt = `You are an AI code assistant. Use the following context from the user's codebase to answer the question.
+
+Context:
+${context}
+
+Question: ${question}
+
+Answer the question with detailed explanations. Format your response using markdown:
+- Use proper headings (##) for sections
+- Format code snippets with triple backticks and the appropriate language
+- Use **bold** for important terms
+- Use inline code formatting with backticks for variable names, function names, and short code references
+- If referencing specific lines or sections of code, clearly indicate the file and line numbers
+- Highlight the most relevant parts of the code that answer the question
+
+Answer:`;
     
     // Generate answer from Gemini
     console.log("[QA API] Generating answer from Gemini");
@@ -98,15 +144,15 @@ export async function POST(req: NextRequest) {
       answer = "Sorry, there was an error generating the answer. Please try again later.";
     }
     
-    // Return the answer and referenced files
+    // Return the answer and referenced files with structured code references
+    const structuredReferences = (topFiles || []).map((file: any) => ({
+      fileName: file.fileName,
+      summary: file.summary || '',
+      sourceCode: file.sourceCode || file.codeSnippet || '',
+    }));
     return NextResponse.json({
       answer,
-      referencedFiles: topFiles.map(file => ({
-        id: file.id,
-        fileName: file.fileName,
-        summary: file.summary,
-        sourceCode: file.sourceCode || ""
-      })),
+      referencedFiles: structuredReferences,
     });
   } catch (err) {
     // Log the detailed error

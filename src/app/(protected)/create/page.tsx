@@ -66,8 +66,9 @@ const CreatePage = () => {
         reset();
         setCreditCheckData(null);
       },
-      onError: () => {
-        toast.error('Failed to create project');
+      onError: (error) => {
+        console.error('Project creation error:', error);
+        toast.error(`Failed to create project: ${error.message}`);
       }
     });
   };

@@ -18,14 +18,17 @@ export async function POST(req: NextRequest) {
     });
 
     const currentCredits = currentUser?.credits || 150;
-    const purchasedCredits = credits - currentCredits;
-
-    if (purchasedCredits <= 0) {
+    
+    // Validate the new credit amount
+    if (credits < currentCredits) {
       return NextResponse.json(
-        { error: 'Invalid credit amount' },
+        { error: 'New credit amount cannot be less than current credits' },
         { status: 400 }
       );
     }
+    
+    // Calculate purchased credits for transaction record
+    const purchasedCredits = credits - currentCredits;
 
     // Update user credits in database
     await db.user.update({

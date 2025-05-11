@@ -115,8 +115,10 @@ export default function MeetingTranscription({ audioUrl, fileName }: MeetingTran
         setError('Transcription failed: ' + (result.error || 'Unknown error'));
         setIsTranscribing(false);
       } else {
-        // Still processing, poll again after a delay
-        setTimeout(() => pollTranscriptionStatus(id), 5000);
+        // Still processing, continue polling after a delay
+        setTimeout(() => {
+          pollTranscriptionStatus(id);
+        }, 3000);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to check transcription status');
@@ -125,9 +127,8 @@ export default function MeetingTranscription({ audioUrl, fileName }: MeetingTran
   };
 
   const formatTime = (milliseconds: number) => {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
+    const minutes = Math.floor(milliseconds / 60000);
+    const seconds = Math.floor((milliseconds % 60000) / 1000);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
@@ -189,7 +190,7 @@ export default function MeetingTranscription({ audioUrl, fileName }: MeetingTran
                       `This is an automated summary of the meeting transcript: ${transcriptionResult.text.substring(0, 500)}...` : 
                       'No summary available');
                   
-                  const formattedSummary = formatMeetingSummary(summaryText);
+                  const formattedSummary = formatMeetingSummary(summaryText, transcriptionResult.utterances);
                   console.log('Formatted summary:', formattedSummary);
                   
                   return (
@@ -215,8 +216,8 @@ export default function MeetingTranscription({ audioUrl, fileName }: MeetingTran
                         </div>
                       </div>
                       
-                      {/* Enhanced Summary Grid Layout with better visual hierarchy */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                      {/* Only Key Points Section */}
+                      <div className="mb-5">
                         {/* Key Points Section - Enhanced */}
                         <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-5 shadow-sm border border-blue-200 hover:shadow-md transition-shadow duration-200">
                           <div className="flex items-center mb-4">
@@ -242,114 +243,27 @@ export default function MeetingTranscription({ audioUrl, fileName }: MeetingTran
                             </div>
                           )}
                         </div>
-                        
-                        {/* Action Items Section - Enhanced */}
-                        <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-5 shadow-sm border border-green-200 hover:shadow-md transition-shadow duration-200">
-                          <div className="flex items-center mb-4">
-                            <div className="bg-green-500 p-2 rounded-full mr-3 shadow-sm">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                              </svg>
-                            </div>
-                            <h4 className="font-semibold text-green-800 text-lg">Action Items</h4>
-                          </div>
-                          {formattedSummary.actionItems.length > 0 ? (
-                            <ul className="space-y-3">
-                              {formattedSummary.actionItems.map((item, index) => (
-                                <li key={index} className="flex items-start bg-white p-3 rounded-md shadow-sm border border-green-100">
-                                  <div className="flex-shrink-0 bg-green-100 text-green-600 rounded-full w-6 h-6 flex items-center justify-center mr-3 mt-0.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  </div>
-                                  <span className="text-gray-700 font-medium">{item}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <div className="bg-white p-4 rounded-md text-gray-500 italic border border-green-100">
-                              No action items identified
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* Decisions Section - Enhanced */}
-                        <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg p-5 shadow-sm border border-purple-200 hover:shadow-md transition-shadow duration-200">
-                          <div className="flex items-center mb-4">
-                            <div className="bg-purple-500 p-2 rounded-full mr-3 shadow-sm">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                              </svg>
-                            </div>
-                            <h4 className="font-semibold text-purple-800 text-lg">Decisions Made</h4>
-                          </div>
-                          {formattedSummary.decisions.length > 0 ? (
-                            <ul className="space-y-3">
-                              {formattedSummary.decisions.map((decision, index) => (
-                                <li key={index} className="flex items-start bg-white p-3 rounded-md shadow-sm border border-purple-100">
-                                  <div className="flex-shrink-0 bg-purple-100 text-purple-600 rounded-full w-6 h-6 flex items-center justify-center mr-3 mt-0.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                    </svg>
-                                  </div>
-                                  <span className="text-gray-700 font-medium">{decision}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <div className="bg-white p-4 rounded-md text-gray-500 italic border border-purple-100">
-                              No decisions identified
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* Participants Section - Enhanced */}
-                        <div className="bg-gradient-to-r from-amber-50 to-amber-100 rounded-lg p-5 shadow-sm border border-amber-200 hover:shadow-md transition-shadow duration-200">
-                          <div className="flex items-center mb-4">
-                            <div className="bg-amber-500 p-2 rounded-full mr-3 shadow-sm">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                              </svg>
-                            </div>
-                            <h4 className="font-semibold text-amber-800 text-lg">Participants</h4>
-                          </div>
-                          {formattedSummary.participants.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {formattedSummary.participants.map((participant, index) => (
-                                <span key={index} className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-white text-amber-800 border border-amber-200 shadow-sm">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                  </svg>
-                                  {participant}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="bg-white p-4 rounded-md text-gray-500 italic border border-amber-100">
-                              No participants identified
-                            </div>
-                          )}
-                        </div>
                       </div>
                       
                       {/* Full Summary (Collapsible) */}
-                      <details className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
-                        <summary className="font-medium text-blue-600 cursor-pointer hover:text-blue-800 focus:outline-none">View Full Summary</summary>
-                        <div className="mt-3 text-gray-700 text-sm leading-relaxed">
-                          <p>{formattedSummary.mainSummary}</p>
+                      <details className="mt-4">
+                        <summary className="text-blue-600 cursor-pointer font-semibold">
+                          ▼ View Full Summary
+                        </summary>
+                        <div className="mt-2 p-4 bg-white rounded-lg">
+                          {formattedSummary.mainSummary || 'No summary available'}
                         </div>
                       </details>
                       
                       {/* Export Button */}
-                      <div className="flex justify-end mt-4">
+                      <div className="mt-4 flex justify-end">
                         <button
                           onClick={() => {
-                            const element = document.createElement("a");
+                            // Create a text file with the summary
+                            const element = document.createElement('a');
                             const file = new Blob([
                               `# ${formattedSummary.meetingTitle}\n\n` +
                               `## Key Points\n\n${formattedSummary.keyPoints.map(p => `- ${p}`).join('\n')}\n\n` +
-                              `## Action Items\n\n${formattedSummary.actionItems.map(a => `- ${a}`).join('\n')}\n\n` +
-                              `## Decisions\n\n${formattedSummary.decisions.map(d => `- ${d}`).join('\n')}\n\n` +
                               `## Full Summary\n\n${formattedSummary.mainSummary}`
                             ], {type: 'text/plain'});
                             element.href = URL.createObjectURL(file);
@@ -369,26 +283,6 @@ export default function MeetingTranscription({ audioUrl, fileName }: MeetingTran
                     </>
                   );
                 })()}
-              </div>
-            </div>
-          )}
-          
-          {/* Chapters/Topics Section */}
-          {transcriptionResult.chapters && transcriptionResult.chapters.length > 0 && (
-            <div className="mb-4">
-              <h3 className="font-medium text-gray-800 mb-2">Topics Discussed</h3>
-              <div className="space-y-2">
-                {transcriptionResult.chapters.map((chapter, index) => (
-                  <div key={index} className="border border-gray-200 rounded-md p-3">
-                    <div className="flex justify-between">
-                      <h4 className="font-medium">{chapter.headline}</h4>
-                      <span className="text-xs text-gray-500">
-                        {formatTime(chapter.start)} - {formatTime(chapter.end)}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">{chapter.summary}</p>
-                  </div>
-                ))}
               </div>
             </div>
           )}
