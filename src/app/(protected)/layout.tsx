@@ -1,7 +1,7 @@
 "use client";
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { Sidebar } from 'lucide-react'
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { UserButton } from "@clerk/nextjs"
 import { AppSidebar } from './dashboard/app-sidebar'
 import { ProjectProvider } from '@/hooks/project-context' // <-- add this import
@@ -9,6 +9,12 @@ type Props = {
     children: React.ReactNode
 }
 const SidebarLayout = ({ children} : Props) => {
+  // Use client-side rendering for components that might cause hydration issues
+  const [isMounted, setIsMounted] = useState(false);
+  
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   return (
     <ProjectProvider>
       <SidebarProvider>
@@ -17,7 +23,8 @@ const SidebarLayout = ({ children} : Props) => {
             <div className='flex items-center gap-2 border-sidebar-border bg-sidebar border shadow rounded-md p-2 px-4 '>
                 {/* <Searchbar /> */}
                 <div className="ml-auto"></div>
-                <UserButton />
+                {/* Only render UserButton on the client to prevent hydration errors */}
+                {isMounted && <UserButton />}
             </div>
             <div className="h-4"></div>
             {/* main content */}
