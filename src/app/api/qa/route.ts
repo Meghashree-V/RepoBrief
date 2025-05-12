@@ -46,13 +46,21 @@ export async function POST(req: NextRequest) {
         const questionEmbedding = await generateEmbedding(question);
         // Compute cosine similarity for each file
         const scoredFiles = files.map(file => {
-          if (!file.embedding || !Array.isArray(file.embedding) || file.embedding.length !== questionEmbedding.length) {
+          if (
+            !file ||
+            !file.embedding ||
+            !Array.isArray(file.embedding) ||
+            !questionEmbedding ||
+            !Array.isArray(questionEmbedding) ||
+            file.embedding.length !== questionEmbedding.length
+          ) {
             return { file, similarity: -1 };
           }
-          // Cosine similarity
-          const dot = file.embedding.reduce((sum, v, i) => sum + v * questionEmbedding[i], 0);
-          const normA = Math.sqrt(file.embedding.reduce((sum, v) => sum + v * v, 0));
-          const normB = Math.sqrt(questionEmbedding.reduce((sum, v) => sum + v * v, 0));
+          const embedding = file.embedding as number[];
+          const qEmbedding = questionEmbedding; // questionEmbedding is guaranteed to be an array here
+          const dot = embedding.reduce((sum, v, i) => sum + v * qEmbedding[i]!, 0);
+          const normA = Math.sqrt(embedding.reduce((sum, v) => sum + v * v, 0)) || 0;
+          const normB = Math.sqrt(qEmbedding.reduce((sum, v) => sum + v * v, 0)) || 0;
           const similarity = (normA && normB) ? dot / (normA * normB) : -1;
           return { file, similarity };
         });

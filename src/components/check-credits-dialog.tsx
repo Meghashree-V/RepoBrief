@@ -10,8 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { checkUserCredits, deductCredits } from "@/lib/stripe";
+import { checkUserCredits, deductCredits } from "@/app/actions/stripe";
 import { BuyCreditsButton } from "./buy-credits-button";
+import { useUser } from "@clerk/nextjs";
 
 interface CheckCreditsDialogProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export function CheckCreditsDialog({
     currentCredits: number;
     requiredCredits: number;
   } | null>(null);
+  const { user } = useUser();
 
   // Check if user has enough credits when dialog opens
   useState(() => {
@@ -45,7 +47,7 @@ export function CheckCreditsDialog({
   const checkCredits = async () => {
     try {
       setIsLoading(true);
-      const result = await checkUserCredits(requiredCredits);
+      const result = await checkUserCredits(requiredCredits, user?.id || "");
       setCreditCheck(result);
     } catch (error) {
       console.error("Error checking credits:", error);
@@ -59,7 +61,7 @@ export function CheckCreditsDialog({
       setIsLoading(true);
       
       // Deduct credits
-      await deductCredits(requiredCredits);
+      await deductCredits(requiredCredits, user?.id || "");
       
       // Call the onConfirm callback
       onConfirm();

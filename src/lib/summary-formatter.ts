@@ -16,6 +16,9 @@ export function formatMeetingSummary(summaryText: string, fileName?: string, utt
   duration: string;
   transcript?: string;
   speakerSummaries?: { speaker: string; summary: string }[];
+  actionItems?: string[];
+  decisions?: string[];
+  participants?: string[];
 } {
   let speakerSummaries: { speaker: string; summary: string }[] = [];
 

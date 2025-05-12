@@ -253,7 +253,7 @@ export default function MeetingDetailClient({ meetingId }: MeetingDetailClientPr
                         transcriptionResult.text ||
                         'No summary available';
                       
-                      const formattedSummary = formatMeetingSummary(summaryText, transcriptionResult.utterances);
+                      const formattedSummary = formatMeetingSummary(summaryText, undefined, transcriptionResult.utterances as any);
                       console.log('Formatted summary:', formattedSummary);
                       
                       return (

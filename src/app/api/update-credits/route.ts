@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Create transaction record
-    await db.StripeTransaction.create({
+    await db.stripeTransaction.create({
       data: {
         userId,
         credits: purchasedCredits,
