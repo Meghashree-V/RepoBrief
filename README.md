@@ -28,7 +28,7 @@ RepoBrief is an AI-powered platform designed to help teams understand and naviga
 - [AssemblyAI](https://www.assemblyai.com/) – Audio transcription and summarization
 - [tRPC](https://trpc.io) – End-to-end typesafe APIs
 - [Tailwind CSS](https://tailwindcss.com) – Utility-first CSS framework
-- [NextAuth.js](https://next-auth.js.org) – (If still used) Authentication for Next.js
+- [Clerk](https://clerk.dev) – Authentication and user management for Next.js  
 - [Supabase](https://supabase.com) – Stores meeting files and transcription history
 - [GitHub API](https://docs.github.com/en/rest) – Repository data and analysis
 ---
@@ -42,9 +42,7 @@ RepoBrief is an AI-powered platform designed to help teams understand and naviga
 
 2. **Install dependencies**
    ```sh
-   npm install
-   # or
-   yarn install
+   bun install
 
 3. **Set up environment variables**
    Copy .env.example to .env
@@ -58,23 +56,29 @@ RepoBrief is an AI-powered platform designed to help teams understand and naviga
 
 4. **Run database migrations**
    ```sh
-   npx prisma migrate deploy
+   bun prisma migrate deploy
 
 5. **Start the development server**
    ```sh
-   npm run dev
-   # or
-   yarn dev
+   bun dev
 
-6. **Usage**
+6. **To check prisma db***
+   ```sh
+   bun prisma studio
+
+7. **Stripe CLI Webhook Forwarding- INSTALL STRIPE CLI***
+   ```sh
+   stripe listen --forward-to http://localhost:3000/api/webhooks/stripe
+
+8. **Usage**
    Billing/Credits: Purchase credits on the billing page using Stripe. 50 credits = $1.
    Project Analysis: Create a new project, and RepoBrief will analyze your repository using AI.
    Meeting Upload: Upload audio files for meetings and get transcriptions and summaries.
    Q&A: Use the AI Q&A to ask about code, UI elements, or repository structure. The system highlights exact lines and references in the codebase.
    Team Management: Invite team members and manage access.
 
-7. **Contributing**
+9. **Contributing**
    Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
 
-8. **License**
+10. **License**
    MIT
