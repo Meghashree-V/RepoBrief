@@ -2,7 +2,6 @@
 
 RepoBrief is an AI-powered platform designed to help teams understand and navigate their codebases and meetings with ease. It provides instant answers to questions about your repository, summarizes meetings, and supports seamless onboarding and collaboration.
 
----
 
 ## Features
 
@@ -15,7 +14,6 @@ RepoBrief is an AI-powered platform designed to help teams understand and naviga
 - **Project Management**: Create, archive, and manage multiple repositories and projects.
 - **Credit System**: Check and purchase credits, with usage tracked for analysis features.
 
----
 ---
 
 ## 🚀 How It Works
