@@ -32,7 +32,7 @@ Sign up or log in securely using Clerk authentication.
 ---
 
 ### 2. Create a Project  
-Connect your GitHub repository and create a new project. All metadata is stored in Neon (Postgres).
+Connect your GitHub repository and create a new project. All metadata is stored in Neon (Postgres) & Prisma db.
 
 ![Create Project](https://github.com/user-attachments/assets/8fd5f312-ea62-4921-86e3-6597f022bc4d)
 ![Dashboard Page](https://github.com/user-attachments/assets/8c25f875-0c9f-4275-b71d-c00023174fd9)
@@ -49,7 +49,7 @@ Go to the billing page and purchase credits using Stripe. Your credit balance is
 ---
 
 ### 4. Ask Questions about Your Codebase  
-Use the AI-powered Q&A feature to ask questions about your codebase. RepoBrief highlights relevant code and answers in context.
+Use the AI-powered Q&A feature to ask questions about your codebase. RepoBrief highlights relevant code and answers in context using Gemini AI.
 
 ![AI Q&A](https://github.com/user-attachments/assets/268a524c-6faa-4591-b953-8aa29a3c71fc)
 ![Response](https://github.com/user-attachments/assets/bbf4f0e1-ea3f-42b1-b6c1-0a0e5014a525)
