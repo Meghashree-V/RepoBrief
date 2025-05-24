@@ -22,16 +22,15 @@ RepoBrief is an AI-powered platform designed to help teams understand and naviga
 - [Next.js](https://nextjs.org) – React framework for server-side rendering and static site generation
 - [TypeScript](https://www.typescriptlang.org/) – Strongly typed JavaScript
 - [Prisma](https://prisma.io) – ORM for database access
+- [Neon](https://neon.tech) – Serverless Postgres database
+- [Clerk](https://clerk.com) – Authentication and user management
 - [Stripe](https://stripe.com) – Payment processing
 - [AssemblyAI](https://www.assemblyai.com/) – Audio transcription and summarization
 - [tRPC](https://trpc.io) – End-to-end typesafe APIs
 - [Tailwind CSS](https://tailwindcss.com) – Utility-first CSS framework
-- [NextAuth.js](https://next-auth.js.org) – Authentication for Next.js
-- [Drizzle ORM](https://orm.drizzle.team) – TypeScript ORM (if used in your project)
-- [Supabase](https://supabase.com) – (if used for storage or authentication)
-- [Appwrite](https://appwrite.io) – (if used for storage)
+- [NextAuth.js](https://next-auth.js.org) – (If still used) Authentication for Next.js
+- [Supabase](https://supabase.com) – Stores meeting files and transcription history
 - [GitHub API](https://docs.github.com/en/rest) – Repository data and analysis
-
 ---
 
 ## Getting Started
