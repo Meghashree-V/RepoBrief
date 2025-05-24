@@ -16,6 +16,79 @@ RepoBrief is an AI-powered platform designed to help teams understand and naviga
 - **Credit System**: Check and purchase credits, with usage tracked for analysis features.
 
 ---
+---
+
+## 🚀 How It Works
+
+RepoBrief’s workflow is simple and visual. Follow these steps to get started:
+
+---
+
+### 1. Sign Up with Clerk  
+Sign up or log in securely using Clerk authentication.
+
+![Sign Up]([https://your-image-link.com/signup.png](https://github.com/user-attachments/assets/82536c02-4326-45fc-99a3-e811e31dc424))
+
+---
+
+### 2. Create a Project  
+Connect your GitHub repository and create a new project. All metadata is stored in Neon (Postgres).
+
+![Create Project]([https://your-image-link.com/create-project.png](https://github.com/user-attachments/assets/17357bfa-51bc-43c7-922e-4aabb6bd2eb8))
+
+---
+
+### 3. Purchase Credits via Stripe  
+Go to the billing page and purchase credits using Stripe. Your credit balance is tracked in prisma database.
+
+![Purchase Credits](https://github.com/user-attachments/assets/ad566ac2-ee6a-4250-88d9-8ff53ad0ac7a)
+![After Purchasing Credits](https://github.com/user-attachments/assets/8b72550e-0886-48d8-80c8-79e4e707e192)
+
+
+---
+
+### 4. Ask Questions about Your Codebase  
+Use the AI-powered Q&A feature to ask questions about your codebase. RepoBrief highlights relevant code and answers in context.
+
+![AI Q&A](![image](https://github.com/user-attachments/assets/f08efa4e-9425-4034-b463-06c0c8816aef))
+![Q&A Page saved answers](![image](https://github.com/user-attachments/assets/47f1aa5c-c295-4aa8-a9ae-d85c1476c6ed))
+
+---
+
+### 5. Upload Meeting Audio  
+Upload meeting audio files through the dashboard. Files are securely stored in Supabase.
+
+![Upload Meeting](https://your-image-link.com/upload-meeting.png)
+
+---
+
+### 6. Get Meeting Transcription & Summary  
+RepoBrief uses AssemblyAI to transcribe and summarize your meeting audio. Transcriptions and summaries are saved in Supabase.
+
+![Meeting Summary](https://your-image-link.com/meeting-summary.png)
+
+---
+
+### 7. Collaborate with Your Team  
+Invite team members, assign roles, and collaborate on code and meeting analysis.
+
+![Team Collaboration](https://your-image-link.com/team-collaboration.png)
+
+---
+
+### 8. Manage Your Profile  
+Edit your name, avatar, and view your joined projects and available credits — all from the Profile page.
+
+![Profile Page](https://your-image-link.com/profile.png)
+
+---
+
+### 9. Archive Completed Projects  
+Finished a project? Archive it to keep your workspace clean while preserving data for future reference.
+
+![Archive Project](https://your-image-link.com/archive-project.png)
+
+
 
 ## Tech Stack
 
