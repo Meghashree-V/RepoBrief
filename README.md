@@ -27,14 +27,15 @@ RepoBrief’s workflow is simple and visual. Follow these steps to get started:
 ### 1. Sign Up with Clerk  
 Sign up or log in securely using Clerk authentication.
 
-![Sign Up]([https://your-image-link.com/signup.png](https://github.com/user-attachments/assets/82536c02-4326-45fc-99a3-e811e31dc424))
+![Sign Up](https://github.com/user-attachments/assets/7c0dde1f-a172-466b-a1f5-f999a06b2721)
 
 ---
 
 ### 2. Create a Project  
 Connect your GitHub repository and create a new project. All metadata is stored in Neon (Postgres).
 
-![Create Project]([https://your-image-link.com/create-project.png](https://github.com/user-attachments/assets/17357bfa-51bc-43c7-922e-4aabb6bd2eb8))
+![Create Project](https://github.com/user-attachments/assets/8fd5f312-ea62-4921-86e3-6597f022bc4d)
+![Dashboard Page](https://github.com/user-attachments/assets/8c25f875-0c9f-4275-b71d-c00023174fd9)
 
 ---
 
@@ -50,43 +51,42 @@ Go to the billing page and purchase credits using Stripe. Your credit balance is
 ### 4. Ask Questions about Your Codebase  
 Use the AI-powered Q&A feature to ask questions about your codebase. RepoBrief highlights relevant code and answers in context.
 
-![AI Q&A](![image](https://github.com/user-attachments/assets/f08efa4e-9425-4034-b463-06c0c8816aef))
-![Q&A Page saved answers](![image](https://github.com/user-attachments/assets/47f1aa5c-c295-4aa8-a9ae-d85c1476c6ed))
+![AI Q&A](https://github.com/user-attachments/assets/268a524c-6faa-4591-b953-8aa29a3c71fc)
+![Response](https://github.com/user-attachments/assets/bbf4f0e1-ea3f-42b1-b6c1-0a0e5014a525)
+![Q&A page saved answers](https://github.com/user-attachments/assets/0784a05a-4278-4a36-b7cf-1c74e04d994f)
 
 ---
 
 ### 5. Upload Meeting Audio  
 Upload meeting audio files through the dashboard. Files are securely stored in Supabase.
 
-![Upload Meeting](https://your-image-link.com/upload-meeting.png)
+![Upload Meeting](https://github.com/user-attachments/assets/b5330f80-6b52-4d6b-b063-240a11f0443b)
 
 ---
 
 ### 6. Get Meeting Transcription & Summary  
 RepoBrief uses AssemblyAI to transcribe and summarize your meeting audio. Transcriptions and summaries are saved in Supabase.
 
-![Meeting Summary](https://your-image-link.com/meeting-summary.png)
+![Meeting Summary](https://github.com/user-attachments/assets/d34d3f24-5fe3-4977-8c19-b00b45924832)
 
 ---
 
 ### 7. Collaborate with Your Team  
-Invite team members, assign roles, and collaborate on code and meeting analysis.
+Invite team members, assign roles, and collaborate on projects related queries and meeting analysis.
 
-![Team Collaboration](https://your-image-link.com/team-collaboration.png)
+![Team Collaboration](https://github.com/user-attachments/assets/af17d43e-819a-46e9-b544-9dafe52454f3)
 
 ---
 
 ### 8. Manage Your Profile  
 Edit your name, avatar, and view your joined projects and available credits — all from the Profile page.
 
-![Profile Page](https://your-image-link.com/profile.png)
-
 ---
 
 ### 9. Archive Completed Projects  
-Finished a project? Archive it to keep your workspace clean while preserving data for future reference.
+ Archive projedct to keep your workspace clean while preserving data for future reference.
 
-![Archive Project](https://your-image-link.com/archive-project.png)
+![Archive Project](https://github.com/user-attachments/assets/d9da5e89-7c02-4831-ba2b-4bea04c7c947)
 
 
 
